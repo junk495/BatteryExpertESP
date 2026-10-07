@@ -3,6 +3,7 @@
 #include <ESPmDNS.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
+#include <esp_heap_caps.h>
 
 #include "config.h"
 #include "Mc5000Protocol.h"
@@ -269,6 +270,9 @@ void setup() {
     Serial.begin(115200);
     delay(300);
     Serial.println("\n[M5000Bridge] Start");
+
+    // PSRAM-Runtime-Check (N16R8: 8 MB OPI-PSRAM).
+    Serial.printf("PSRAM free: %u\n", (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 
     g_stateMutex = xSemaphoreCreateMutex();
     loadAddress();

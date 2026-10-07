@@ -208,10 +208,12 @@ std::string Mc5000Protocol::mapStatus(int code) {
 }
 
 std::string Mc5000Protocol::mapMode(int code) {
+    // Byte-Mapping gemäß rssdev10/skyrc-mc-rs (from_byte, Li-Ion-Mapping):
+    // 0=Charge, 1=Storage, 2=Discharge, 3=Cycle, 4=Refresh, 5=BreakIn.
     switch (code) {
         case 0: return "Charge";
-        case 1: return "Discharge";
-        case 2: return "Storage";
+        case 1: return "Storage";
+        case 2: return "Discharge";
         case 3: return "Cycle";
         case 4: return "Refresh";
         case 5: return "Break_in";

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BatteryExpert</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header>
+    <h1>BatteryExpert</h1>
+    <nav>
+      <button data-view="dashboard" class="active">Dashboard</button>
+      <button data-view="register">Zell-Register</button>
+      <button data-view="history">Historie</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Live-Dashboard -->
+    <section id="view-dashboard" class="view">
+      <div id="slots" class="slots"></div>
+      <p id="ble-state" class="muted"></p>
+    </section>
+
+    <!-- Zell-Register -->
+    <section id="view-register" class="view" hidden>
+      <section class="card">
+        <div class="card-head">
+          <h2>Zelltypen</h2>
+          <button id="btn-add-type" class="primary">+ Zelltyp</button>
+        </div>
+        <table>
+          <thead><tr>
+            <th>Hersteller</th><th>Modell</th><th>Chemie</th>
+            <th>Nennkap.</th><th>Nennspannung</th><th></th>
+          </tr></thead>
+          <tbody id="types-body"></tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Zellen</h2>
+          <button id="btn-add-cell" class="primary">+ Zelle</button>
+        </div>
+        <table>
+          <thead><tr>
+            <th>Nr.</th><th>Label</th><th>Typ</th>
+            <th>Status</th><th></th>
+          </tr></thead>
+          <tbody id="cells-body"></tbody>
+        </table>
+      </section>
+    </section>
+
+    <!-- Historie -->
+    <section id="view-history" class="view" hidden>
+      <section class="card">
+        <h2>Historie</h2>
+        <table>
+          <thead><tr>
+            <th>Zeit</th><th>Zelle</th><th>Aktion</th>
+            <th>Kapazität</th><th>Energie</th><th>Innenwiderstand</th>
+          </tr></thead>
+          <tbody id="history-body"></tbody>
+        </table>
+      </section>
+    </section>
+  </main>
+
+  <!-- Modal: Slot belegen -->
+  <div id="slot-modal" class="modal" hidden>
+    <div class="modal-box">
+      <h2>Slot <span id="slot-modal-num"></span> belegen</h2>
+      <label>Zelle
+        <select id="slot-modal-cell"></select>
+      </label>
+      <label>Modus
+        <select id="slot-modal-mode"></select>
+      </label>
+      <div class="modal-actions">
+        <button id="slot-modal-cancel">Abbrechen</button>
+        <button id="slot-modal-start" class="primary">Starten</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Zelle / Zelltyp anlegen oder bearbeiten -->
+  <div id="entity-modal" class="modal" hidden>
+    <div class="modal-box">
+      <h2 id="entity-modal-title"></h2>
+      <form id="entity-form"></form>
+      <div class="modal-actions">
+        <button id="entity-modal-cancel">Abbrechen</button>
+        <button id="entity-modal-save" class="primary">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/ui.js"></script>
+</body>
+</html>

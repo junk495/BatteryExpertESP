@@ -1,5 +1,38 @@
-#include <WiFi.h>   // vor WebServer.h, da WebServer auf Network/WiFi aufbaut
+#include <WiFi.h>       // vor WebServer.h, da WebServer auf Network/WiFi aufbaut
+#include <LittleFS.h>   // PWA-Assets aus dem Flash-Dateisystem ausliefern
 #include "ApiServer.h"
+
+// MIME-Type nach Dateiendung. Der Service Worker (sw.js) MUSS als
+// application/javascript ausgeliefert werden, sonst registriert ihn der Browser nicht.
+static const char* mimeFromPath(const String& path) {
+    if (path.endsWith(".html"))     return "text/html";
+    if (path.endsWith(".css"))      return "text/css";
+    if (path.endsWith(".js"))       return "application/javascript";
+    if (path.endsWith(".json"))     return "application/json";
+    if (path.endsWith(".svg"))      return "image/svg+xml";
+    if (path.endsWith(".png"))      return "image/png";
+    if (path.endsWith(".ico"))      return "image/x-icon";
+    if (path.endsWith(".woff2"))    return "font/woff2";
+    if (path.endsWith(".woff"))     return "font/woff";
+    if (path.endsWith(".manifest")) return "application/manifest+json";
+    return "application/octet-stream";
+}
+
+// Liefert eine Datei aus LittleFS aus; false, wenn sie nicht existiert.
+static bool serveFromLittleFS(WebServer& server, const String& uri) {
+    const String path = (uri == "/") ? "/index.html" : uri;
+    if (!LittleFS.exists(path)) {
+        return false;
+    }
+    File f = LittleFS.open(path, "r");
+    if (!f || f.isDirectory()) {
+        if (f) f.close();
+        return false;
+    }
+    server.streamFile(f, mimeFromPath(path));
+    f.close();
+    return true;
+}
 
 // Minimale Verbindungsseite (HTML + JavaScript). Ruft die /api/*-Endpunkte auf.
 static const char INDEX_HTML[] = R"rawliteral(
@@ -109,7 +142,11 @@ ApiServer::ApiServer(DataStore& store, uint16_t port) : _server(port), _store(st
 
 void ApiServer::begin() {
     _server.on("/", HTTP_GET, [this]() {
-        _server.send(200, "text/html", INDEX_HTML);
+        // PWA aus LittleFS; Fallback auf die eingebettete Setup-Seite, falls das
+        // Dateisystem-Image noch nicht geflasht wurde.
+        if (!serveFromLittleFS(_server, "/")) {
+            _server.send(200, "text/html", INDEX_HTML);
+        }
     });
 
     _server.on("/api/info", HTTP_GET, [this]() {
@@ -239,25 +276,33 @@ void ApiServer::begin() {
         const String uri = _server.uri();
 
         // Item-Mutationen: /api/v1/cells/{id} bzw. /api/v1/cell_types/{id}
-        const char* prefix = nullptr;
-        EntityType entity = EntityType::CELL;
-        if (uri.startsWith("/api/v1/cells/")) {
-            prefix = "/api/v1/cells/";
-            entity = EntityType::CELL;
-        } else if (uri.startsWith("/api/v1/cell_types/")) {
-            prefix = "/api/v1/cell_types/";
-            entity = EntityType::TYPE;
-        }
-        if (prefix) {
-            const String id = uri.substring(strlen(prefix));
-            if (id.length() > 0) {
-                const OpType op = (_server.method() == HTTP_DELETE) ? OpType::DEL : OpType::UPSERT;
-                handleMutation(entity, op, id.c_str());
-                return;
+        if (uri.startsWith("/api/")) {
+            const char* prefix = nullptr;
+            EntityType entity = EntityType::CELL;
+            if (uri.startsWith("/api/v1/cells/")) {
+                prefix = "/api/v1/cells/";
+                entity = EntityType::CELL;
+            } else if (uri.startsWith("/api/v1/cell_types/")) {
+                prefix = "/api/v1/cell_types/";
+                entity = EntityType::TYPE;
             }
+            if (prefix) {
+                const String id = uri.substring(strlen(prefix));
+                if (id.length() > 0) {
+                    const OpType op = (_server.method() == HTTP_DELETE) ? OpType::DEL : OpType::UPSERT;
+                    handleMutation(entity, op, id.c_str());
+                    return;
+                }
+            }
+            _server.send(404, "application/json", "{\"error\":\"not found\"}");
+            return;
         }
 
-        _server.send(404, "application/json", "{\"error\":\"not found\"}");
+        // Statische PWA-Assets aus LittleFS (alles außer /api/*).
+        if (serveFromLittleFS(_server, uri)) {
+            return;
+        }
+        _server.send(404, "text/plain", "not found");
     });
 
     _server.begin();

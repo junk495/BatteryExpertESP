@@ -1,0 +1,9 @@
+{
+  "name": "BatteryExpert",
+  "short_name": "BatteryExpert",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#1a73e8",
+  "icons": []
+}

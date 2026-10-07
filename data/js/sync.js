@@ -24,11 +24,12 @@ export async function syncOnce() {
   return data;
 }
 
-export function startSync(intervalMs = 2000) {
+export function startSync(intervalMs = 2000, onChange = () => {}) {
   (async function loop() {
     for (;;) {
       try {
         await syncOnce();
+        onChange();
       } catch (err) {
         // Transient failure (network blip, restart): keep local state, retry.
         console.warn('[sync] poll failed:', err);

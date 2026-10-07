@@ -1,0 +1,120 @@
+:root {
+  --bg: #f5f6f8;
+  --card: #fff;
+  --border: #ddd;
+  --text: #222;
+  --muted: #777;
+  --accent: #1a73e8;
+  --accent-hover: #1557b0;
+  --danger: #c0392b;
+  --ok: #1e8e3e;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+header h1 { font-size: 1.1rem; margin: 0; }
+
+nav { display: flex; gap: 0.4rem; }
+
+nav button {
+  border: 1px solid var(--border);
+  background: #fff;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+nav button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+main { max-width: 960px; margin: 1rem auto; padding: 0 1rem; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+}
+.card-head { display: flex; align-items: center; justify-content: space-between; }
+.card h2 { font-size: 1rem; margin: 0 0 0.75rem; }
+.card-head h2 { margin: 0; }
+
+/* Slots */
+.slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+.slot {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  min-height: 120px;
+}
+.slot.free { border-style: dashed; cursor: pointer; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 0.5rem; }
+.slot.free:hover { border-color: var(--accent); }
+.slot h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+.slot .row { display: flex; justify-content: space-between; margin: 0.15rem 0; font-size: 0.9rem; }
+.slot .row .k { color: var(--muted); }
+.slot .status { font-weight: 600; }
+.slot .status.Completed { color: var(--ok); }
+.slot .status.Charging, .slot .status.Discharging { color: var(--accent); }
+.slot .status.Processing, .slot .status.Resting { color: #b8860b; }
+
+/* Tabellen */
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th, td { text-align: left; padding: 0.45rem 0.5rem; border-bottom: 1px solid #eee; }
+th { color: var(--muted); font-weight: 600; }
+td.actions { white-space: nowrap; text-align: right; }
+td.actions button { margin-left: 0.3rem; }
+
+/* Buttons */
+button { padding: 0.35rem 0.7rem; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover { background: var(--accent-hover); }
+button.danger { color: var(--danger); border-color: var(--danger); }
+
+.muted { color: var(--muted); font-size: 0.85rem; }
+.badge { padding: 0.1rem 0.45rem; border-radius: 10px; font-size: 0.75rem; }
+.badge.active { background: #e6f4ea; color: var(--ok); }
+.badge.retired { background: #fbe9e7; color: var(--danger); }
+
+/* Modals */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal[hidden] { display: none; }
+.modal-box {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1.25rem;
+  width: min(420px, 92vw);
+}
+.modal-box h2 { margin: 0 0 1rem; font-size: 1.05rem; }
+.modal-box label { display: block; margin-bottom: 0.75rem; font-size: 0.9rem; }
+.modal-box select, .modal-box input {
+  width: 100%;
+  margin-top: 0.3rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }

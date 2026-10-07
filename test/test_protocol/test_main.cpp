@@ -138,6 +138,54 @@ void test_isConfigAckOk(void) {
     TEST_ASSERT_TRUE(codec.isConfigAckOk(ack));
 }
 
+// Mode-Byte-Mapping (kanonisch, Li-Ion) gemäß rssdev10/skyrc-mc-rs:
+// 0=Charge, 1=Storage, 2=Discharge, 3=Cycle, 4=Refresh, 5=BreakIn.
+void test_mapMode(void) {
+    TEST_ASSERT_EQUAL_STRING("Charge",    Mc5000Protocol::mapMode(0).c_str());
+    TEST_ASSERT_EQUAL_STRING("Storage",   Mc5000Protocol::mapMode(1).c_str());
+    TEST_ASSERT_EQUAL_STRING("Discharge", Mc5000Protocol::mapMode(2).c_str());
+    TEST_ASSERT_EQUAL_STRING("Cycle",     Mc5000Protocol::mapMode(3).c_str());
+    TEST_ASSERT_EQUAL_STRING("Refresh",   Mc5000Protocol::mapMode(4).c_str());
+    TEST_ASSERT_EQUAL_STRING("Break_in",  Mc5000Protocol::mapMode(5).c_str());
+}
+
+void test_modeCodeFromString(void) {
+    TEST_ASSERT_EQUAL_INT(0, Mc5000Protocol::modeCodeFromString("charge"));
+    TEST_ASSERT_EQUAL_INT(1, Mc5000Protocol::modeCodeFromString("storage"));
+    TEST_ASSERT_EQUAL_INT(2, Mc5000Protocol::modeCodeFromString("discharge"));
+    TEST_ASSERT_EQUAL_INT(3, Mc5000Protocol::modeCodeFromString("cycle"));
+    TEST_ASSERT_EQUAL_INT(4, Mc5000Protocol::modeCodeFromString("refresh"));
+    TEST_ASSERT_EQUAL_INT(5, Mc5000Protocol::modeCodeFromString("break_in"));
+
+    // Groß-/Kleinschreibung und Aliase
+    TEST_ASSERT_EQUAL_INT(1, Mc5000Protocol::modeCodeFromString("Storage"));
+    TEST_ASSERT_EQUAL_INT(2, Mc5000Protocol::modeCodeFromString("DISCHARGE"));
+    TEST_ASSERT_EQUAL_INT(1, Mc5000Protocol::modeCodeFromString("Lagerung"));
+}
+
+// encode -> decode muss für die kanonischen Modi identisch runden.
+void test_modeRoundTrip(void) {
+    const char* modes[] = {"charge", "storage", "discharge", "cycle", "refresh", "break_in"};
+    const char* expected[] = {"Charge", "Storage", "Discharge", "Cycle", "Refresh", "Break_in"};
+    for (int i = 0; i < 6; ++i) {
+        const int code = Mc5000Protocol::modeCodeFromString(modes[i]);
+        TEST_ASSERT_EQUAL_STRING(expected[i], Mc5000Protocol::mapMode(code).c_str());
+    }
+}
+
+// Das 0x94-Konfigpaket muss das Mode-Byte gemäß kanonischem Mapping tragen.
+void test_buildChargeConfig_modes(void) {
+    ChargeProfile p;
+    p.mode = "discharge";
+    p.dischargeCurrentMa = 1000;
+    auto pkt = codec.buildChargeConfig(p, 0, 2, 3000);
+    TEST_ASSERT_EQUAL_UINT8(0x02, pkt[4]);   // Discharge = 0x02
+
+    p.mode = "storage";
+    pkt = codec.buildChargeConfig(p, 0, 3, 3000);
+    TEST_ASSERT_EQUAL_UINT8(0x01, pkt[4]);   // Storage = 0x01
+}
+
 int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_buildPacket_checksum);
@@ -148,5 +196,9 @@ int main(int argc, char** argv) {
     RUN_TEST(test_parseStatus_truncated);
     RUN_TEST(test_buildChargeConfig);
     RUN_TEST(test_isConfigAckOk);
+    RUN_TEST(test_mapMode);
+    RUN_TEST(test_modeCodeFromString);
+    RUN_TEST(test_modeRoundTrip);
+    RUN_TEST(test_buildChargeConfig_modes);
     return UNITY_END();
 }
