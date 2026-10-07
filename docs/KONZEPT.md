@@ -30,15 +30,16 @@ ansteuert. Diese Bridge macht das Ladegerät über **HTTP/JSON im WLAN** erreich
 | Baustein  | Wahl                                 | Begründung                                              |
 |-----------|--------------------------------------|---------------------------------------------------------|
 | Build     | PlatformIO + Arduino-Framework       | passt zu VS Code, große Library-Auswahl                 |
-| Board     | `esp32dev` (ESP32 DevKit/WROOM-32)   | gängigstes ESP32-Modul, Dual-Core                       |
+| Board     | `esp32-s3-devkitc-1` (N16R8)          | 16 MB Flash, 8 MB OPI-PSRAM, Dual-Core                  |
 | BLE       | NimBLE-Arduino (^2.x)                | leichtgewichtiger BLE-Central, kompatibel mit Core 3.x  |
 | HTTP      | `WebServer.h` (im Arduino-Core)      | synchron, einfach, im Core enthalten                    |
 | JSON      | ArduinoJson (^6.x)                   | Standard                                                |
 | Tests     | Unity (native)                       | reine Protokollschicht ohne Hardware testbar            |
 
-> **Hinweis Core-Version:** installiert ist `espressif32@6.9.0` → **Arduino-Core 3.3.11**
-> (IDF-5.x-Basis). Deshalb NimBLE-Arduino **2.x** und die im Core enthaltene
-> `WebServer`-Bibliothek (kein ESPAsyncWebServer, das mit Core 3.x Probleme macht).
+> **Hinweis Core-Version:** vorausgesetzt wird `espressif32` ≥ 6.x → **Arduino-Core 3.x**
+> (IDF-5.x-Basis; getestet mit 6.9.0 / Core 3.3.11). Deshalb NimBLE-Arduino **2.x** und
+> die im Core enthaltene `WebServer`-Bibliothek (kein ESPAsyncWebServer, das mit
+> Core 3.x Probleme macht).
 
 ---
 
@@ -47,7 +48,7 @@ ansteuert. Diese Bridge macht das Ladegerät über **HTTP/JSON im WLAN** erreich
 ```
 BatteryExpertESP/
 ├── platformio.ini
-├── include/config.h                  # WiFi-Zugangsdaten + Defaults (Template)
+├── include/config.h                  # Defaults (ohne Zugangsdaten)
 ├── lib/Mc5000Protocol/               # reine Protokollschicht (nativ testbar)
 │   ├── Mc5000Protocol.h
 │   └── Mc5000Protocol.cpp
@@ -104,12 +105,22 @@ BatteryExpertESP/
 
 ## 5. REST-API (Phase 1)
 
-| Methode | Pfad             | Body                 | Zweck                       |
-|---------|------------------|----------------------|-----------------------------|
-| GET     | `/api/info`      | –                    | Geräte-/Verbindungsinfo     |
-| GET     | `/api/status`    | –                    | Status aller 4 Slots (JSON) |
-| POST    | `/api/charge`    | siehe unten          | Konfig setzen + Slot starten|
-| POST    | `/api/startstop` | `{"action": 0..8}`   | `0x93` (Start/Stopp)        |
+| Methode | Pfad              | Body                            | Zweck                             |
+|---------|-------------------|---------------------------------|-----------------------------------|
+| GET     | `/`               | –                               | Webseite (Verbindung + WLAN-Setup)|
+| GET     | `/api/info`      | –                               | Geräte-/Verbindungsinfo           |
+| GET     | `/api/status`    | –                               | Status aller 4 Slots (JSON)       |
+| GET     | `/api/scan`      | –                               | BLE-Geräte suchen (Liste)         |
+| POST    | `/api/connect`   | `{"address":"…"}`               | Gerät wählen + verbinden          |
+| POST    | `/api/disconnect`| –                               | Trennen + Auswahl löschen         |
+| GET     | `/api/wifi`      | –                               | WLAN-Status (SSID, verbunden, IP) |
+| POST    | `/api/wifi`      | `{"ssid":"…","password":"…"}`   | WLAN-Zugangsdaten speichern       |
+| POST    | `/api/charge`    | siehe unten                     | Konfig setzen + Slot starten      |
+| POST    | `/api/startstop` | `{"action": 0..8}`              | `0x93` (Start/Stopp)              |
+
+Persistenz (NVS): die gewählte BLE-MAC-Adresse und die WLAN-Zugangsdaten werden
+auf dem Gerät gespeichert – nicht im Code. Die Bridge verbindet sich nach
+Neustart/Verbindungsverlust automatisch wieder, bis explizit getrennt wird.
 
 `POST /api/charge` (Felder optional, Defaults in Klammern):
 

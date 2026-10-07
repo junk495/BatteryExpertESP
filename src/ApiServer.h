@@ -12,9 +12,14 @@ public:
     ApiServer(uint16_t port = 80);
 
     // Vom Hauptprogramm gesetzte Callbacks.
-    std::function<String()> infoProvider;                    // GET  /api/info
-    std::function<String()> statusProvider;                  // GET  /api/status
-    std::function<bool(int action)> startStopHandler;        // POST /api/startstop {action}
+    std::function<String()> infoProvider;                     // GET  /api/info
+    std::function<String()> statusProvider;                   // GET  /api/status
+    std::function<String()> scanProvider;                     // GET  /api/scan
+    std::function<bool(const String& addr)> connectHandler;   // POST /api/connect {address}
+    std::function<bool()> disconnectHandler;                  // POST /api/disconnect
+    std::function<String()> wifiProvider;                     // GET  /api/wifi
+    std::function<bool(const String& ssid, const String& pass)> wifiSaveHandler; // POST /api/wifi
+    std::function<bool(int action)> startStopHandler;         // POST /api/startstop {action}
     std::function<bool(const JsonObject& obj)> chargeHandler; // POST /api/charge
 
     void begin();

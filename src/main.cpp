@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <ESPmDNS.h>
 #include <ArduinoJson.h>
+#include <Preferences.h>
 
 #include "config.h"
 #include "Mc5000Protocol.h"
@@ -19,6 +20,55 @@ static bool g_slotValid[4] = {false, false, false, false};
 
 static unsigned long g_lastPoll = 0;
 static unsigned long g_lastReconnect = 0;
+
+// Gewählte Ladegerät-MAC (persistent gespeichert); leer = keine Auswahl.
+static String g_bleAddress;
+
+// ---------- Persistenz (Preferences/NVS) ----------
+static void loadAddress() {
+    Preferences prefs;
+    prefs.begin("mc5000", true);
+    g_bleAddress = prefs.getString("addr", "");
+    prefs.end();
+}
+
+static void saveAddress(const String& addr) {
+    g_bleAddress = addr;
+    Preferences prefs;
+    prefs.begin("mc5000", false);
+    prefs.putString("addr", addr);
+    prefs.end();
+}
+
+static void clearAddress() {
+    g_bleAddress = "";
+    Preferences prefs;
+    prefs.begin("mc5000", false);
+    prefs.remove("addr");
+    prefs.end();
+}
+
+// WLAN-Zugangsdaten (nur auf dem Gerät gespeichert, nicht im Code).
+static String g_wifiSsid;
+static String g_wifiPass;
+
+static void loadWifi() {
+    Preferences prefs;
+    prefs.begin("mc5000", true);
+    g_wifiSsid = prefs.getString("ssid", "");
+    g_wifiPass = prefs.getString("pass", "");
+    prefs.end();
+}
+
+static void saveWifi(const String& ssid, const String& pass) {
+    g_wifiSsid = ssid;
+    g_wifiPass = pass;
+    Preferences prefs;
+    prefs.begin("mc5000", false);
+    prefs.putString("ssid", ssid);
+    prefs.putString("pass", pass);
+    prefs.end();
+}
 
 // ---------- BLE-Notification-Callback (läuft im BLE-Task) ----------
 static void onMc5000Notify(const std::vector<uint8_t>& data) {
@@ -74,10 +124,37 @@ static String buildInfoJson() {
     doc["device"] = "mc5000-bridge";
     doc["hostname"] = HOSTNAME;
     doc["bleConnected"] = g_ble.isConnected();
+    doc["address"] = g_bleAddress;
     doc["slots"] = 4;
     String out;
     serializeJson(doc, out);
     return out;
+}
+
+static String buildScanJson() {
+    auto devices = g_ble.scanDevices(3);
+    DynamicJsonDocument doc(4096);
+    JsonArray arr = doc.createNestedArray("devices");
+    for (const auto& d : devices) {
+        JsonObject o = arr.createNestedObject();
+        o["name"] = d.name.c_str();
+        o["address"] = d.address.c_str();
+    }
+    String out;
+    serializeJson(doc, out);
+    return out;
+}
+
+// ---------- Verbindungs-Handler ----------
+static bool handleConnect(const String& address) {
+    saveAddress(address);
+    return g_ble.connect(address.c_str());
+}
+
+static bool handleDisconnect() {
+    g_ble.disconnect();
+    clearAddress();
+    return true;
 }
 
 // ---------- Kommando-Handler ----------
@@ -115,24 +192,68 @@ static bool handleStartStop(int action) {
 }
 
 // ---------- WiFi ----------
-static void setupWifi() {
-    Serial.println("[wifi] verbinde mit " WIFI_SSID " ...");
+static bool wifiIsConnected() {
+    return WiFi.status() == WL_CONNECTED;
+}
+
+static void startAp() {
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP(AP_SSID);   // offener Setup-Access-Point (kein Passwort im Code)
+    Serial.printf("[wifi] Access-Point %s, IP: %s\n", AP_SSID, WiFi.softAPIP().toString().c_str());
+}
+
+static bool connectWifi() {
+    if (g_wifiSsid.length() == 0) {
+        return false;
+    }
+    Serial.printf("[wifi] verbinde mit %s ...\n", g_wifiSsid.c_str());
+    WiFi.disconnect();
     WiFi.mode(WIFI_STA);
     WiFi.setHostname(HOSTNAME);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFi.begin(g_wifiSsid.c_str(), g_wifiPass.c_str());
 
     const unsigned long start = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_CONNECT_TIMEOUT_MS) {
+    while (!wifiIsConnected() && millis() - start < WIFI_CONNECT_TIMEOUT_MS) {
         delay(500);
     }
 
-    if (WiFi.status() == WL_CONNECTED) {
+    if (wifiIsConnected()) {
         Serial.printf("[wifi] verbunden, IP: %s\n", WiFi.localIP().toString().c_str());
-    } else {
-        Serial.println("[wifi] kein WLAN gefunden -> starte Access-Point " AP_SSID);
-        WiFi.mode(WIFI_AP);
-        WiFi.softAP(AP_SSID, AP_PASSWORD);
-        Serial.printf("[wifi] AP-IP: %s\n", WiFi.softAPIP().toString().c_str());
+        return true;
+    }
+    Serial.println("[wifi] Verbindung fehlgeschlagen");
+    return false;
+}
+
+static String buildWifiJson() {
+    DynamicJsonDocument doc(256);
+    doc["ssid"] = g_wifiSsid;
+    doc["connected"] = wifiIsConnected();
+    doc["ip"] = WiFi.localIP().toString();
+    String out;
+    serializeJson(doc, out);
+    return out;
+}
+
+static bool handleWifiSave(const String& ssid, const String& pass) {
+    if (ssid.length() == 0) {
+        return false;
+    }
+    saveWifi(ssid, pass);
+    if (!connectWifi()) {
+        startAp();   // Fallback, bis eine Verbindung gelingt
+    }
+    return true;
+}
+
+static void setupWifi() {
+    loadWifi();
+
+    if (g_wifiSsid.length() == 0) {
+        Serial.println("[wifi] keine Zugangsdaten hinterlegt -> Access-Point für die Ersteinrichtung");
+        startAp();
+    } else if (!connectWifi()) {
+        startAp();
     }
 
     if (MDNS.begin(HOSTNAME)) {
@@ -147,21 +268,33 @@ void setup() {
     Serial.println("\n[M5000Bridge] Start");
 
     g_stateMutex = xSemaphoreCreateMutex();
+    loadAddress();
 
     setupWifi();
 
     g_api.infoProvider = buildInfoJson;
     g_api.statusProvider = buildStatusJson;
+    g_api.scanProvider = buildScanJson;
+    g_api.connectHandler = handleConnect;
+    g_api.disconnectHandler = handleDisconnect;
+    g_api.wifiProvider = buildWifiJson;
+    g_api.wifiSaveHandler = handleWifiSave;
     g_api.startStopHandler = handleStartStop;
     g_api.chargeHandler = handleCharge;
     g_api.begin();
 
     g_ble.setNotifyCallback(onMc5000Notify);
     g_ble.begin();
-    if (g_ble.scanAndConnect(5)) {
-        Serial.println("[ble] MC5000 verbunden");
+
+    if (g_bleAddress.length() > 0) {
+        Serial.printf("[ble] gespeichertes Ladegerät: %s\n", g_bleAddress.c_str());
+        if (g_ble.connect(g_bleAddress.c_str())) {
+            Serial.println("[ble] verbunden");
+        } else {
+            Serial.println("[ble] Verbindung fehlgeschlagen (wird erneut versucht)");
+        }
     } else {
-        Serial.println("[ble] MC5000 nicht gefunden (wird weiter versucht)");
+        Serial.println("[ble] kein Ladegerät gewählt -> Verbindung über die Webseite herstellen");
     }
 }
 
@@ -177,11 +310,12 @@ void loop() {
                 delay(POLL_SLOT_GAP_MS);
             }
         }
-    } else {
+    } else if (g_bleAddress.length() > 0) {
+        // Gewähltes Ladegerät erneut verbinden (bis explizit getrennt wird).
         if (millis() - g_lastReconnect >= RECONNECT_DELAY_MS) {
             g_lastReconnect = millis();
             Serial.println("[ble] versuche Verbindung ...");
-            g_ble.scanAndConnect(5);
+            g_ble.connect(g_bleAddress.c_str());
         }
     }
 }

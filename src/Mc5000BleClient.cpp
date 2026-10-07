@@ -31,40 +31,34 @@ void Mc5000BleClient::disconnect() {
     _connected = false;
 }
 
-bool Mc5000BleClient::scanAndConnect(uint32_t scanSeconds) {
-    if (isConnected()) {
-        return true;
-    }
-    disconnect();
+std::vector<BleDeviceInfo> Mc5000BleClient::scanDevices(uint32_t scanSeconds) {
+    std::vector<BleDeviceInfo> result;
 
     NimBLEScan* scan = NimBLEDevice::getScan();
     scan->setActiveScan(true);
     NimBLEScanResults results = scan->start(scanSeconds);
 
-    NimBLEAdvertisedDevice* target = nullptr;
     for (int i = 0; i < results.getCount(); ++i) {
         NimBLEAdvertisedDevice* dev = results.getDevice(i);
         if (!dev) {
             continue;
         }
-        const std::string name = dev->getName();
-        if (name.find("MC5000") != std::string::npos ||
-            name.find("SkyRC") != std::string::npos ||
-            dev->isAdvertisingService(SERVICE_UUID)) {
-            target = dev;
-            break;
-        }
+        BleDeviceInfo info;
+        info.name = dev->getName();
+        info.address = dev->getAddress().toString();
+        result.push_back(info);
     }
 
-    if (!target) {
-        scan->clearResults();
-        return false;
-    }
+    scan->clearResults();
+    return result;
+}
+
+bool Mc5000BleClient::connect(const std::string& address) {
+    disconnect();   // bestehende Verbindung (falls vorhanden) trennen
 
     NimBLEClient* client = NimBLEDevice::createClient();
-    if (!client->connect(target)) {
+    if (!client->connect(NimBLEAddress(address))) {
         NimBLEDevice::deleteClient(client);
-        scan->clearResults();
         return false;
     }
 
@@ -74,7 +68,6 @@ bool Mc5000BleClient::scanAndConnect(uint32_t scanSeconds) {
     if (!svc) {
         client->disconnect();
         NimBLEDevice::deleteClient(client);
-        scan->clearResults();
         return false;
     }
 
@@ -82,7 +75,6 @@ bool Mc5000BleClient::scanAndConnect(uint32_t scanSeconds) {
     if (!chr) {
         client->disconnect();
         NimBLEDevice::deleteClient(client);
-        scan->clearResults();
         return false;
     }
 
@@ -95,8 +87,6 @@ bool Mc5000BleClient::scanAndConnect(uint32_t scanSeconds) {
     _client = client;
     _chr = chr;
     _connected = true;
-
-    scan->clearResults();
     return true;
 }
 

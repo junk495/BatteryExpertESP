@@ -1,0 +1,51 @@
+# Cline Rules – BatteryExpertESP
+
+Verbindliche Regeln für die Arbeit an diesem Repository (ESP32-Firmware).
+
+## Sprache
+
+- Dokumentation (`README.md`, `docs/`, `AGENTS.md`, dieses File): **Deutsch**.
+- Code (Bezeichner, Kommentare, Commit-Messages): **Englisch**, knapp.
+- Dokumente **neutral/allgemein** formulieren (keine persönliche Ansprache des
+  Lesers), damit sie GitHub-tauglich sind.
+
+## Build & Test
+
+- Firmware bauen: `pio run -e esp32s3`
+- Native Codec-Unit-Tests: `pio test -e test` (benötigt einen Host-C++-Compiler)
+- Keine zwei Builds parallel starten (PlatformIO-Lock).
+- Erste Builds dauern mehrere Minuten (285-MB-Core-Libs-Download + voller Arduino-Core).
+
+## Struktur-Konventionen
+
+- `lib/` → reine, hardwareunabhängige Bibliotheken (kein `#include <Arduino.h>`).
+- `src/` → Arduino-abhängiger Code (WiFi, BLE, HTTP).
+- `include/` → gemeinsam genutzte Header (z. B. `config.h`).
+- `test/` → native Unity-Tests, ausschließlich für `lib/`-Code.
+
+## Protokollschicht (`lib/Mc5000Protocol`)
+
+- Ist ein **1:1-Port** von `com.batteryexpert.data.ble.ProtocolCodec` der Android-App.
+- Byte-Layout, Offsets und Prüfsumme nicht ohne Verifikation ändern
+  (Referenz: `rssdev10/skyrc-mc-rs` → `docs/PROTOCOL.md`, oder Test am echten Gerät).
+- Offene `0x94`-Platzhalter sind mit `// TODO: verifizieren` markiert und bleiben unangetastet.
+- Der Status-Parser muss robust gegen 20-Byte-Kürzungen (BLE-MTU) bleiben.
+
+## Sicherheit
+
+- **Keine WLAN-Zugangsdaten im Code**: SSID/Passwort werden über die Weboberfläche
+  eingegeben und nur im NVS des Geräts gespeichert.
+- Keine Secrets in Logs, Commit-Messages oder Antworten ausgeben.
+
+## Tests
+
+- Änderungen am Codec müssen die Tests in `test/test_protocol/test_main.cpp` ergänzen/aktualisieren.
+- Neue Mapping-/Parsing-Logik mit Unit-Tests abdecken.
+
+## Bekannte Fallstricke
+
+- **Windows Long-Path:** Der Core-Libs-Download enthält Matter/`connectedhomeip`-Header
+  mit Pfaden > 260 Zeichen. Bei Entpack-Fehlern `LongPathsEnabled=1` setzen und neu starten.
+- **BLE↔WiFi-Koexistenz:** beide teilen sich das 2,4-GHz-Funkmodul; Polling-Intervalle
+  (`POLL_INTERVAL_MS`, `POLL_SLOT_GAP_MS`) nicht unnötig aggressiv wählen.
+- **Ein BLE-Client:** Der MC5000 akzeptiert nur eine gleichzeitige Verbindung.
