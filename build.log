@@ -1,0 +1,120 @@
+Processing esp32dev (platform: espressif32; board: esp32dev; framework: arduino)
+--------------------------------------------------------------------------------
+Tool Manager: Installing https://github.com/espressif/arduino-esp32/releases/download/3.3.11/esp32-core-3.3.11-libs.tar.xz
+Unpacking 0%Unpacking...
+FileNotFoundError: Traceback (most recent call last):
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\package\manager\_install.py", line 37, in unpack
+    return fu.unpack(dst, with_progress=with_progress)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\package\unpack.py", line 186, in unpack
+    self._archiver.extract_item(item, dest_dir)
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\package\unpack.py", line 102, in extract_item
+    return super().extract_item(item, dest_dir)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\package\unpack.py", line 49, in extract_item
+    self._afo.extract(item, dest_dir)
+  File "C:\Users\erich\.platformio\python3\Lib\tarfile.py", line 2297, in extract
+    self._extract_one(tarinfo, path, set_attrs, numeric_owner)
+  File "C:\Users\erich\.platformio\python3\Lib\tarfile.py", line 2331, in _extract_one
+    self._handle_fatal_error(e)
+  File "C:\Users\erich\.platformio\python3\Lib\tarfile.py", line 2327, in _extract_one
+    self._extract_member(tarinfo, os.path.join(path, tarinfo.name),
+  File "C:\Users\erich\.platformio\python3\Lib\tarfile.py", line 2410, in _extract_member
+    self.makefile(tarinfo, targetpath)
+  File "C:\Users\erich\.platformio\python3\Lib\tarfile.py", line 2455, in makefile
+    with bltn_open(targetpath, "wb") as target:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\erich\\.platformio\\.cache\\tmp\\pkg-installing-6rkadkw9\\esp32-arduino-libs\\esp32c6\\include\\espressif__esp_matter\\connectedhomeip\\connectedhomeip\\src\\app\\clusters\\camera-av-settings-user-level-management-server\\camera-av-settings-user-level-management-server.h'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\__main__.py", line 103, in main
+    cli()  # pylint: disable=no-value-for-parameter
+    ^^^^^
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\click\core.py", line 1514, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\click\core.py", line 1435, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\cli.py", line 85, in invoke
+    return super().invoke(ctx)
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\click\core.py", line 1902, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\click\core.py", line 1298, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\click\core.py", line 853, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\click\decorators.py", line 34, in new_func
+    return f(get_current_context(), *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\run\cli.py", line 147, in cli
+    process_env(
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\run\cli.py", line 210, in process_env
+    ).process()
+      ^^^^^^^^^
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\run\processor.py", line 81, in process
+    install_project_env_dependencies(
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\package\commands\install.py", line 132, in install_project_env_dependencies
+    _install_project_env_platform(project_env, options),
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\package\commands\install.py", line 149, in _install_project_env_platform
+    PlatformPackageManager().install(
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\package\manager\platform.py", line 62, in install
+    p.install_required_packages(force=force)
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\platform\_packages.py", line 76, in install_required_packages
+    self.install_package(name, force=force)
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\platform\_packages.py", line 70, in install_package
+    return self.pm.install(spec or self.get_package_spec(name), force=force)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\package\manager\_install.py", line 47, in install
+    pkg = self._install(spec, skip_dependencies=skip_dependencies, force=force)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\package\manager\_install.py", line 97, in _install
+    pkg = self.install_from_uri(spec.uri, spec)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\package\manager\_install.py", line 191, in install_from_uri
+    self.unpack(dl_path, tmp_dir)
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\package\manager\_install.py", line 42, in unpack
+    return fu.unpack(dst, with_progress=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\package\unpack.py", line 179, in unpack
+    self._archiver.extract_item(item, dest_dir)
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\package\unpack.py", line 102, in extract_item
+    return super().extract_item(item, dest_dir)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\erich\.platformio\penv\Lib\site-packages\platformio\package\unpack.py", line 49, in extract_item
+    self._afo.extract(item, dest_dir)
+  File "C:\Users\erich\.platformio\python3\Lib\tarfile.py", line 2297, in extract
+    self._extract_one(tarinfo, path, set_attrs, numeric_owner)
+  File "C:\Users\erich\.platformio\python3\Lib\tarfile.py", line 2331, in _extract_one
+    self._handle_fatal_error(e)
+  File "C:\Users\erich\.platformio\python3\Lib\tarfile.py", line 2327, in _extract_one
+    self._extract_member(tarinfo, os.path.join(path, tarinfo.name),
+  File "C:\Users\erich\.platformio\python3\Lib\tarfile.py", line 2410, in _extract_member
+    self.makefile(tarinfo, targetpath)
+  File "C:\Users\erich\.platformio\python3\Lib\tarfile.py", line 2455, in makefile
+    with bltn_open(targetpath, "wb") as target:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\erich\\.platformio\\.cache\\tmp\\pkg-installing-6rkadkw9\\esp32-arduino-libs\\esp32c6\\include\\espressif__esp_matter\\connectedhomeip\\connectedhomeip\\src\\app\\clusters\\camera-av-settings-user-level-management-server\\camera-av-settings-user-level-management-server.h'
+
+============================================================
+
+An unexpected error occurred. Further steps:
+
+* Verify that you have the latest version of PlatformIO using
+  `python -m pip install -U platformio` command
+
+* Try to find answer in FAQ Troubleshooting section
+  https://docs.platformio.org/page/faq/index.html
+
+* Report this problem to the developers
+  https://github.com/platformio/platformio-core/issues
+
+============================================================
+
