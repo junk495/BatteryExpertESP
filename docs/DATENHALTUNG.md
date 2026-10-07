@@ -1,89 +1,167 @@
-# BatteryExpertESP – Datenhaltung & App (Konzept-Entwurf)
+# BatteryExpertESP – Datenarchitektur & Concurrency Engine
 
-## 1. Überblick
+Technisches Konzept für die Datenhaltung auf der ESP32-S3-Bridge (N16R8:
+16 MB Flash, 8 MB PSRAM). Beschreibt effizientes PSRAM-Speichermanagement, atomare
+Synchronisation und minimalen Bandbreitenverbrauch bei REST-Abfragen.
 
-Die ESP32-S3-Bridge dient nicht nur als BLE<->WiFi-Übersetzer, sondern auch als
-**Datenhalter** (Quelle der Wahrheit) für die Akku-Verwaltung. Eine App im Browser ist
-der Client: Sie lädt beim Start den dauerhaften Stand, arbeitet live und meldet
-Ereignisse zurück.
+## 1. Architektur & Checkpoint-Prinzip
 
-```
-[MC5000] --BLE--> [ESP32-S3: Bridge + Datenhaltung] <--HTTP--> [App im Browser]
-                      |-- Flash (LittleFS): Sammelfile (dauerhaft)
-                      |-- RAM: Live-Daten (transient)
-```
+Das System entkoppelt drei Aufgaben sauber:
 
-## 2. Rollenverteilung
+- **Datenerfassung (Producer-Task):** BLE-Polling des Ladegeräts, schreibt Messwerte
+  atomar in Puffer.
+- **Verarbeitung/Aggregierung:** Completed-Erkennung, Zusammenführen von Änderungen,
+  Checkpoint.
+- **Datenbereitstellung (HTTP-Loop-Task):** Delta-/Live-Endpunkte für die Clients.
 
-| Komponente | Aufgabe |
-|---|---|
-| ESP32-S3 | BLE-Anbindung, Live-Daten halten, dauerhafte Daten speichern (Flash), Sammelfile liefern/annehmen |
-| App (Browser) | Oberfläche, Fachlogik (Alterungsbewertung, SOH), Diagramme; Daten holen, Ereignisse melden |
+**Zustandsmodell:** Der dauerhafte Systemzustand liegt als JSON-Dokument dauerhaft im
+PSRAM. Änderungen werden erst nach Validierung als neuer Checkpoint in den Flash
+(LittleFS) geschrieben.
 
-Die ESP **rechnet nicht** (keine Fachlogik) – sie **speichert** nur und übersetzt das
-BLE-Protokoll.
+**Inkrementelle Checkpoints:** Jeder gültige Zustandswechsel erhöht einen monoton
+steigenden `sequence_id`.
 
-## 3. Speicher-Ebenen
+**Client-Synchronisation:** Clients laden nicht den gesamten Zustand, sondern übergeben
+ihre letzte bekannte `sequence_id`. Das System liefert nur die Differenz (Delta) seit
+diesem Stand. Ist die `sequence_id` zu alt oder ungültig, folgt eine Vollsynchronisation.
 
-1. **Flash (LittleFS) – dauerhaft:** eine JSON-**Sammelfile** mit Akkutypen, Zellen
-   (mit Nummer) und der Historie abgeschlossener Ergebnisse. Wird nur bei Checkpoints
-   geschrieben (atomar: Temp-Datei -> Umbenennen).
-2. **RAM (ESP) – transient:** Live-Messwerte für die Diagramme (aktuelle Ladekurve).
-   Nur im Arbeitsspeicher; geht bei Neustart verloren.
-3. **App (Browser) – Arbeitskopie:** hält die geladenen Daten während der Sitzung,
-   hat aber keinen eigenen dauerhaften Speicher.
+### Bounded Change-Log
 
-## 4. Checkpoint-Prinzip (write-behind)
+Damit Deltas ab `since_seq` lieferbar sind, hält die ESP ein **begrenztes Change-Log**
+(z. B. die letzten 50 Mutationen) im PSRAM. Reicht ein Client-`since_seq` über das
+Fenster hinaus, wird ein Full-Sync erzwungen. Drei Kernentscheidungen fixieren die
+Implementierung:
 
-- Während des Betriebs wird nur im RAM gearbeitet -> keine Flash-Abnutzung.
-- Nur bei **bestimmten Ereignissen** wird die Sammelfile in den Flash geschrieben.
-- Die konkreten Ereignisse werden **im Laufe der Entwicklung** festgelegt (voraussichtlich:
-  Abschluss einer Ladung/Entladung, Anlegen/Ändern einer Zelle oder eines Akkutyps).
-- Das Schreiben erfolgt **atomar** (Temp-Datei -> Rename), damit ein Stromausfall die
-  Sammelfile nicht korrumpiert.
+**1. Statischer Puffer & Full-Sync-Fallback.** Das Log ist ein fest allokierter
+Ringpuffer ohne Laufzeit-Heap – kein dynamischer `String`, keine `std::vector` im
+Puffer selbst. Jeder Eintrag ist eine kompakte `struct` (`seq_id`, `entity`, `op`,
+`payload[128]`). Die Full-Sync-Bedingung ist exakt: Ist die Zahl der fehlenden Einträge
+`current_seq - since_seq - 1` größer als `count`, fällt der Client aus dem Fenster und
+erhält einen Full-Sync. Der Grenzfall `elements_to_read == count` wird noch als Delta
+bedient (kein Off-by-one).
 
-## 5. Sammelfile – JSON-Schema (Entwurf)
+**2. Zero-Copy-Serialisierung.** Das Log speichert keine geparsten Objekte, sondern
+fertige JSON-Schnipsel (max. 127 Byte) im `payload`-Feld. Der HTTP-Handler hängt diese
+bei der Antwort unverändert per `serialized(entry.payload)` in ArduinoJson ein. Damit
+entfallen Parsing und erneutes Serialisieren je Request – das spart CPU-Zyklen im
+REST-Pfad. Der Ausgabe-`std::vector` wird klassenweit einmal `reserve(...)` und vor
+jedem Request nur `clear()` aufgerufen, um Fragmentierung im internen RAM zu vermeiden.
 
-> Platzhalter – Felder werden im Laufe der Entwicklung konkretisiert.
+**3. Operationstypen.** Jeder Eintrag trägt einen `op`-Typ `UPSERT` oder `DEL`, damit
+der Browser-Client Deltas konfliktfrei mergen kann: `UPSERT` legt eine Entität an bzw.
+ersetzt sie, `DEL` entfernt sie anhand der ID. `history` ist append-only und benötigt
+daher kein `op`.
 
-```json
-{
-  "version": 1,
-  "cell_types": [
-    { "id": "ct-1", "manufacturer": "...", "model": "...", "chemistry": "Li-Ion",
-      "nominal_capacity_mah": 3000, "nominal_voltage_v": 3.7, "typical_ir_mohm": 25 }
-  ],
-  "cells": [
-    { "id": "c-1", "number": 1, "cell_type_id": "ct-1", "label": "30Q #1" }
-  ],
-  "history": [
-    { "id": "h-1", "cell_id": "c-1", "type": "discharge_test",
-      "measured_capacity_mah": 2850, "measured_ir_mohm": 26,
-      "soh_percent": 95, "result": "ok", "timestamp": "2026-10-07T12:00:00Z" }
-  ]
-}
-```
+**Neustart:** Beim Boot generiert die ESP eine neue Basis-`sequence_id` (z. B. aus dem
+Boot-Timestamp). Ein Client mit alter oder ungültiger `sequence_id` erhält dadurch
+automatisch einen sauberen Full-Sync.
 
-## 6. REST-API (Entwurf)
+## 2. REST-API
+
+Zwei getrennte Schnittstellen: **Delta** (persistent, ereignisgesteuert) und **Live**
+(transient, gepollt). Diese Trennung ist zwingend – 1-Hz-Messwertänderungen dürfen den
+Sequenzzähler nicht hochtreiben.
+
+### 2.1 Delta-API (persistenter Zustand)
 
 | Methode | Pfad | Zweck |
 |---|---|---|
-| GET | `/data` | Sammelfile (JSON) holen -> App lädt sie beim Start; dient zugleich als Backup/Export |
-| PUT/POST | `/data` | Sammelfile an die ESP zurückschreiben (Import/Änderungen) |
-| GET | `/live` | Live-Diagrammdaten (Messwerte im RAM) für die Anzeige |
-| POST | `/event` | Ereignis melden (z. B. "Ladung abgeschlossen") -> löst ggf. Checkpoint aus |
+| GET | `/api/v1/delta?since_seq=N` | Differenz seit `since_seq`; bei zu altem/fehlendem Wert: Full-Sync |
+| POST | `/api/v1/cells` | Zelle anlegen |
+| PATCH | `/api/v1/cells/{id}` | Zelle ändern |
+| DELETE | `/api/v1/cells/{id}` | Zelle löschen |
+| POST/PATCH/DELETE | `/api/v1/cell_types/{id}` | Akkutyp analog |
+| POST | `/api/v1/history` | Ergebnis anhängen (append-only) |
 
-> Die bestehenden Endpunkte (`/api/status`, `/api/charge`, ...) bleiben für die
-> Ladegerät-Steuerung erhalten.
+**Delta-Payload:**
 
-## 7. Backup / Export
+```json
+{
+  "current_seq": 1048,
+  "full": false,
+  "deltas": {
+    "cells": [
+      { "op": "upsert", "cell": { "id": 3, "number": 3, "label": "30Q #3", "cell_type_id": "ct-1" } },
+      { "op": "delete", "id": 7 }
+    ],
+    "types": [
+      { "op": "upsert", "type": { "id": 1, "model": "INR18650-30Q", "status": "ACTIVE" } }
+    ],
+    "history": [
+      { "id": "h-2", "cell_id": "c-1", "timestamp": 1711900800, "measured_capacity_mah": 2850, "soh_percent": 95 }
+    ]
+  }
+}
+```
 
-Der dauerhafte Stand ist **eine einzige JSON-Datei** – ein Backup ist daher trivial:
-`GET /data` liefert die Datei, die als Kopie gespeichert oder wieder importiert werden
-kann (`PUT /data`).
+- `history` ist append-only (kein `op` nötig).
+- `full: true` (statt `deltas`) markiert eine Vollsynchronisation.
 
-## 8. Offene Punkte (später festlegen)
+### 2.2 Live-API (transienter Zustand)
 
-- Konkrete **Checkpoint-Ereignisse** (wann wird geschrieben).
-- **Exakter Inhalt** der Sammelfile (welche Felder dauerhaft, welche nur live).
+| Methode | Pfad | Zweck |
+|---|---|---|
+| GET | `/api/live` | Ausgedünnter Ringpuffer (Messwerte im RAM) für die Diagramme |
+
+Live-Daten (Spannung, Strom, Temperatur) sind **transient** und werden **nicht**
+dauerhaft gespeichert. Sie ändern sich bei ~1 Hz und bleiben damit außerhalb des
+`sequence_id`-Systems.
+
+## 3. Speicherverwaltung (PSRAM)
+
+Interner SRAM ist knapp; dynamische Allokationen und der Ringpuffer liegen im externen
+PSRAM.
+
+- **Custom Allocator:** `BasicJsonDocument<SpiRamAllocator>` für
+  Serialisierung/Deserialisierung großer Dokumente.
+- **Heap-Management:** SRAM nur für zeitkritische Task-Stacks und
+  Synchronisationsobjekte; große Puffer und Verlaufsdaten ausschließlich im PSRAM.
+
+| Speicherbereich | Datentyp / Zweck | Lokation |
+|---|---|---|
+| Core Task Stacks | Realtime-Tasks, ISR-Handler | Interner SRAM |
+| Synchronisation | Mutexes, Semaphores, Task-Notifications | Interner SRAM |
+| Live-Data Buffer | Ausgedünnter Ringpuffer | Externer PSRAM |
+| JSON Buffers | `SpiRamAllocator` | Externer PSRAM |
+| Change-Log | Letzte N Mutationen | Externer PSRAM |
+
+## 4. Ringpuffer für Live-Daten
+
+FIFO-Ringpuffer pro Slot im PSRAM, kompakte Structs (kein JSON).
+
+- **Abtastung:** ~1 Hz (BLE-Polling-Limit des MC5000).
+- **Ausdünnung (Downsampling):**
+  - Neueste Daten mit voller Granularität (1 s).
+  - Ältere Daten schrittweise ausgedünnt: nach 1 Minute -> 10-s-Mittelwerte,
+    nach 1 Stunde -> 30-s-/1-min-Mittelwerte.
+  - Speicherbedarf bleibt deterministisch, Granularität für Live-Daten maximal.
+- **Limit:** z. B. 1000 Punkte pro Slot.
+- Erst bei `GET /live` zu JSON serialisieren.
+
+## 5. Thread Safety (Concurrency)
+
+### Entkopplung der Completed-Erkennung
+
+Das Erkennen und Verarbeiten von `Completed` liegt vollständig im **HTTP-Loop-Task**
+(nicht im Erfassungs-/BLE-Callback):
+
+1. Erfassungs-Tasks schreiben Daten atomar in die Puffer.
+2. Nach dem Schreiben wird nur ein Flag gesetzt / Zähler erhöht.
+3. Der Loop-Task prüft im Hauptdurchlauf den Status, erkennt `Completed`,
+   konsolidiert das Delta im PSRAM und bedient Clients.
+
+### Mutex- & Lock-Strategie
+
+- **Read/Write-Mutex** auf Ringpuffer und Slot-Cache (cross-task zwischen BLE- und
+  Loop-Task).
+- **Minimale Haltezeit:** Das Mutex wird nicht über die gesamte JSON-Generierung/
+  Sendedauer gehalten. Stattdessen wird unter Mutex ein schneller **Memory-Snapshot**
+  im PSRAM erstellt; das Streaming erfolgt ohne Mutex auf dem Snapshot.
+- Checkpoint-Logik läuft ausschließlich im Loop-Task -> kein zusätzliches Mutex auf dem
+  Dokument nötig.
+
+## 6. Offene Punkte (später festlegen)
+
+- Exakter Inhalt der dauerhaften Strukturen (Felder je Entität).
+- Konkrete Checkpoint-Ereignisse (welche Mutationen einen Flash-Write auslösen).
 - LittleFS-Partitionsgröße.
