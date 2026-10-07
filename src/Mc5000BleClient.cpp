@@ -3,7 +3,7 @@
 #include <NimBLEDevice.h>
 
 namespace {
-// Identisch zur Android-App (Mc5000BleManager.kt).
+// Same as the Android app (Mc5000BleManager.kt).
 const NimBLEUUID SERVICE_UUID("0000ffe0-0000-1000-8000-00805f9b34fb");
 const NimBLEUUID CHAR_UUID("0000ffe1-0000-1000-8000-00805f9b34fb");
 constexpr int REQUESTED_MTU = 247;
@@ -11,6 +11,7 @@ constexpr int REQUESTED_MTU = 247;
 
 void Mc5000BleClient::begin(const std::string& deviceName) {
     NimBLEDevice::init(deviceName);
+    NimBLEDevice::setMTU(REQUESTED_MTU);
 }
 
 void Mc5000BleClient::setNotifyCallback(NotifyCallback cb) {
@@ -36,10 +37,10 @@ std::vector<BleDeviceInfo> Mc5000BleClient::scanDevices(uint32_t scanSeconds) {
 
     NimBLEScan* scan = NimBLEDevice::getScan();
     scan->setActiveScan(true);
-    NimBLEScanResults results = scan->start(scanSeconds);
+    NimBLEScanResults results = scan->getResults(scanSeconds);   // blocking scan
 
     for (int i = 0; i < results.getCount(); ++i) {
-        NimBLEAdvertisedDevice* dev = results.getDevice(i);
+        const NimBLEAdvertisedDevice* dev = results.getDevice(i);
         if (!dev) {
             continue;
         }
@@ -54,15 +55,13 @@ std::vector<BleDeviceInfo> Mc5000BleClient::scanDevices(uint32_t scanSeconds) {
 }
 
 bool Mc5000BleClient::connect(const std::string& address) {
-    disconnect();   // bestehende Verbindung (falls vorhanden) trennen
+    disconnect();   // disconnect existing connection (if any)
 
     NimBLEClient* client = NimBLEDevice::createClient();
-    if (!client->connect(NimBLEAddress(address))) {
+    if (!client->connect(NimBLEAddress(address, 0))) {   // 0 = public address
         NimBLEDevice::deleteClient(client);
         return false;
     }
-
-    client->setMTU(REQUESTED_MTU);
 
     NimBLERemoteService* svc = client->getService(SERVICE_UUID);
     if (!svc) {
@@ -78,7 +77,7 @@ bool Mc5000BleClient::connect(const std::string& address) {
         return false;
     }
 
-    chr->subscribe(true, [this](NimBLERemoteCharacteristic*, uint8_t* data, size_t len, bool, void*) {
+    chr->subscribe(true, [this](NimBLERemoteCharacteristic*, uint8_t* data, size_t len, bool) {
         if (_onNotify && len > 0) {
             _onNotify(std::vector<uint8_t>(data, data + len));
         }
@@ -94,5 +93,5 @@ bool Mc5000BleClient::writePacket(const std::vector<uint8_t>& data) {
     if (!isConnected() || !_chr) {
         return false;
     }
-    return _chr->writeValue(data.data(), data.size(), false);   // false = ohne Antwort
+    return _chr->writeValue(data.data(), data.size(), false);   // false = no response
 }
