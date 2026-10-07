@@ -5,8 +5,8 @@
 .vscode/
 *.code-workspace
 
-# Build-Artefakte
-build.log
+# Build-Artefakte / Logs
+*.log
 build.exit
 build.bat
 *.bin

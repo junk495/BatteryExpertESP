@@ -14,7 +14,7 @@ struct ChangeEntry {
     uint32_t seq_id;
     EntityType entity;
     OpType op;
-    char payload[128];
+    char payload[200];   // reicht auch für history-Schnipsel (~134 Zeichen)
 };
 
 class BoundedChangeLog {
@@ -32,6 +32,15 @@ public:
 
     uint32_t getCurrentSeq() const { return current_seq; }
     size_t getCount() const { return count; }
+    static size_t maxEntries() { return MAX_ENTRIES; }
+
+    // Re-initialize to an empty log starting at start_seq. Used on boot to
+    // establish a fresh sync epoch so stale clients trigger a full sync.
+    void reset(uint32_t start_seq) {
+        head = 0;
+        count = 0;
+        current_seq = start_seq;
+    }
 
     // Appends a mutation and increments the sequence id. Returns the new id.
     uint32_t push(EntityType entity, OpType op, const char* json_payload) {

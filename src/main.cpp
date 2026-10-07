@@ -7,16 +7,19 @@
 #include "config.h"
 #include "Mc5000Protocol.h"
 #include "Mc5000BleClient.h"
+#include "DataStore.h"
 #include "ApiServer.h"
 
 // ---------- Globale Zustände ----------
 static mc5000::Mc5000Protocol g_protocol;
 static Mc5000BleClient g_ble;
-static ApiServer g_api;
+static DataStore g_store;
+static ApiServer g_api(g_store);
 
 static SemaphoreHandle_t g_stateMutex = nullptr;
 static mc5000::SlotStatus g_slots[4];
 static bool g_slotValid[4] = {false, false, false, false};
+static std::string last_status[4];   // vorheriger Slot-Status (Completed-Flankenerkennung)
 
 static unsigned long g_lastPoll = 0;
 static unsigned long g_lastReconnect = 0;
@@ -272,6 +275,9 @@ void setup() {
 
     setupWifi();
 
+    g_store.begin();
+    g_store.syncTime(10000);   // NTP nach WLAN-Verbindung (absolute Zeitstempel)
+
     g_api.infoProvider = buildInfoJson;
     g_api.statusProvider = buildStatusJson;
     g_api.scanProvider = buildScanJson;
@@ -298,12 +304,52 @@ void setup() {
     }
 }
 
+// Verarbeitet den letzten BLE-Slot-Status (1 Hz): Live-Daten pushen + Completed-Flanke.
+static void processStatus() {
+    int completed[4];
+    int completedCount = 0;
+    int cap[4], ir[4];
+    std::string action[4];   // echter mode, unter dem Mutex kopiert
+
+    if (g_stateMutex && xSemaphoreTake(g_stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        for (int i = 0; i < 4; ++i) {
+            if (!g_slotValid[i]) continue;
+            const mc5000::SlotStatus& s = g_slots[i];
+
+            g_store.pushLivePoint(
+                i,
+                (uint16_t)(s.voltageV * 1000.0f),   // V -> mV
+                (int16_t)(s.currentA * 1000.0f),    // A -> mA
+                (uint16_t)s.capacityMah,            // mAh
+                (int8_t)(s.temperatureC + 0.5f)     // °C
+            );
+
+            // Flankenerkennung: Übergang auf "Completed"
+            if (last_status[i] != "Completed" && s.status == "Completed") {
+                completed[completedCount] = i;
+                cap[completedCount] = s.capacityMah;
+                ir[completedCount] = s.internalResistanceMOhm;
+                action[completedCount] = s.mode;   // echter mode -> action (charge/discharge/...)
+                completedCount++;
+            }
+            last_status[i] = s.status;
+        }
+        xSemaphoreGive(g_stateMutex);
+    }
+
+    // Abschluss außerhalb des Mutex (finalizeSlot schreibt via Checkpoint in LittleFS).
+    for (int k = 0; k < completedCount; ++k) {
+        g_store.finalizeSlot(completed[k], cap[k], ir[k], action[k].c_str());
+    }
+}
+
 void loop() {
     g_api.handle();
 
     if (g_ble.isConnected()) {
         if (millis() - g_lastPoll >= POLL_INTERVAL_MS) {
             g_lastPoll = millis();
+            processStatus();   // vorherige Poll-Ergebnisse (während der Wartezeit angekommen)
             const int masks[4] = {1, 2, 4, 8};
             for (int i = 0; i < 4; ++i) {
                 g_ble.writePacket(g_protocol.buildStatusRequest(masks[i]));

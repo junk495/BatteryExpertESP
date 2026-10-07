@@ -105,7 +105,7 @@ setInterval(function(){ refresh(); refreshWifi(); }, 3000);
 </html>
 )rawliteral";
 
-ApiServer::ApiServer(uint16_t port) : _server(port) {}
+ApiServer::ApiServer(DataStore& store, uint16_t port) : _server(port), _store(store) {}
 
 void ApiServer::begin() {
     _server.on("/", HTTP_GET, [this]() {
@@ -193,16 +193,81 @@ void ApiServer::begin() {
             return;
         }
         JsonObject obj = doc.as<JsonObject>();
+        // Session-Kopplung: Zelle dem Slot zuordnen (transient).
+        const char* cell_id = obj["cell_id"] | "";
+        const int slot = obj["slot"] | 0;
+        if (cell_id[0] != '\0' && slot >= 1 && slot <= 4) {
+            _store.assignSlot(slot - 1, cell_id);
+        }
         bool ok = chargeHandler ? chargeHandler(obj) : false;
         _server.send(ok ? 200 : 502, "application/json",
                      ok ? "{\"ok\":true}" : "{\"ok\":false,\"error\":\"ble not connected\"}");
     });
 
+    // ---- DataStore-Endpunkte ----
+
+    _server.on("/api/v1/delta", HTTP_GET, [this]() {
+        uint32_t since_seq = 0;
+        if (_server.hasArg("since_seq")) {
+            since_seq = (uint32_t)strtoul(_server.arg("since_seq").c_str(), nullptr, 10);
+        }
+        String out;
+        if (!_store.buildDeltaJson(since_seq, out)) {
+            _store.buildFullSyncJson(out);
+        }
+        _server.send(200, "application/json", out);
+    });
+
+    _server.on("/api/live", HTTP_GET, [this]() {
+        String out;
+        _store.buildLiveJson(out);
+        _server.send(200, "application/json", out);
+    });
+
+    // Collection-POST (Anlegen; ID kommt im Body)
+    _server.on("/api/v1/cells", HTTP_POST, [this]() {
+        handleMutation(EntityType::CELL, OpType::UPSERT, nullptr);
+    });
+    _server.on("/api/v1/cell_types", HTTP_POST, [this]() {
+        handleMutation(EntityType::TYPE, OpType::UPSERT, nullptr);
+    });
+    _server.on("/api/v1/history", HTTP_POST, [this]() {
+        handleMutation(EntityType::HISTORY, OpType::UPSERT, nullptr);
+    });
+
     _server.onNotFound([this]() {
+        const String uri = _server.uri();
+
+        // Item-Mutationen: /api/v1/cells/{id} bzw. /api/v1/cell_types/{id}
+        const char* prefix = nullptr;
+        EntityType entity = EntityType::CELL;
+        if (uri.startsWith("/api/v1/cells/")) {
+            prefix = "/api/v1/cells/";
+            entity = EntityType::CELL;
+        } else if (uri.startsWith("/api/v1/cell_types/")) {
+            prefix = "/api/v1/cell_types/";
+            entity = EntityType::TYPE;
+        }
+        if (prefix) {
+            const String id = uri.substring(strlen(prefix));
+            if (id.length() > 0) {
+                const OpType op = (_server.method() == HTTP_DELETE) ? OpType::DEL : OpType::UPSERT;
+                handleMutation(entity, op, id.c_str());
+                return;
+            }
+        }
+
         _server.send(404, "application/json", "{\"error\":\"not found\"}");
     });
 
     _server.begin();
+}
+
+void ApiServer::handleMutation(EntityType entity, OpType op, const char* id) {
+    const String body = _server.arg("plain");
+    const bool ok = _store.applyMutation(entity, op, id, body.c_str());
+    _server.send(ok ? 200 : 400, "application/json",
+                 ok ? "{\"ok\":true}" : "{\"ok\":false,\"error\":\"invalid mutation\"}");
 }
 
 void ApiServer::handle() {

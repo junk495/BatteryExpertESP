@@ -84,7 +84,31 @@ void test_payload_truncation(void) {
     log.push(EntityType::TYPE, OpType::UPSERT, long_payload);
     TEST_ASSERT_TRUE(log.getDeltasSince(1, deltas));
     TEST_ASSERT_EQUAL(1, (int)deltas.size());
-    TEST_ASSERT_EQUAL(127, (int)strlen(deltas[0].payload));
+    TEST_ASSERT_EQUAL(199, (int)strlen(deltas[0].payload));
+}
+
+void test_reset(void) {
+    BoundedChangeLog log;
+    log.push(EntityType::CELL, OpType::UPSERT, "a");
+    log.push(EntityType::TYPE, OpType::UPSERT, "b");
+    TEST_ASSERT_EQUAL_UINT32(3, log.getCurrentSeq());
+    TEST_ASSERT_EQUAL(2, (int)log.getCount());
+
+    log.reset(1000000);
+    TEST_ASSERT_EQUAL_UINT32(1000000, log.getCurrentSeq());
+    TEST_ASSERT_EQUAL(0, (int)log.getCount());
+
+    std::vector<ChangeEntry> deltas;
+    // Client fully synced before the reset (last seq = 999999) gets nothing.
+    TEST_ASSERT_TRUE(log.getDeltasSince(999999, deltas));
+    TEST_ASSERT_EQUAL(0, (int)deltas.size());
+
+    uint32_t s = log.push(EntityType::HISTORY, OpType::UPSERT, "c");
+    TEST_ASSERT_EQUAL_UINT32(1000000, s);
+    TEST_ASSERT_EQUAL_UINT32(1000001, log.getCurrentSeq());
+    TEST_ASSERT_TRUE(log.getDeltasSince(999999, deltas));
+    TEST_ASSERT_EQUAL(1, (int)deltas.size());
+    TEST_ASSERT_EQUAL_UINT32(1000000, deltas[0].seq_id);
 }
 
 int main(int argc, char** argv) {
@@ -93,5 +117,6 @@ int main(int argc, char** argv) {
     RUN_TEST(test_deltas_since_basic);
     RUN_TEST(test_wrap_around_and_full_sync);
     RUN_TEST(test_payload_truncation);
+    RUN_TEST(test_reset);
     return UNITY_END();
 }

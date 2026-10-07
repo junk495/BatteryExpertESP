@@ -7,9 +7,11 @@
 #include <WebServer.h>
 #include <functional>
 
+#include "DataStore.h"
+
 class ApiServer {
 public:
-    ApiServer(uint16_t port = 80);
+    ApiServer(DataStore& store, uint16_t port = 80);
 
     // Vom Hauptprogramm gesetzte Callbacks.
     std::function<String()> infoProvider;                     // GET  /api/info
@@ -27,4 +29,8 @@ public:
 
 private:
     WebServer _server;
+    DataStore& _store;
+
+    // Führt eine persistente Mutation aus (Route+Methode -> EntityType/OpType).
+    void handleMutation(EntityType entity, OpType op, const char* id);
 };
