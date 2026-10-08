@@ -1,10 +1,18 @@
 # BatteryExpertESP
 
 ESP32-Firmware als **BLE→WiFi-Bridge** für das **SkyRC MC5000** Ladegerät.
-Macht das Gerät über eine einfache HTTP/JSON-Schnittstelle im WLAN erreichbar.
+Macht das Gerät über eine HTTP/JSON-Schnittstelle im WLAN erreichbar.
 
-> Gegenstück zur Android-App **BatteryExpert** (Kotlin). Beide teilen sich das
-> reverse-engineered BLE-Protokoll – siehe [`docs/KONZEPT.md`](docs/KONZEPT.md).
+**So funktioniert es:** Auf der ESP liegt eine **Web-App (PWA)**. Öffnet man die
+ESP-IP im Browser, wird diese App **von der ESP geladen** und läuft anschließend
+im Browser (Handy/PC). Die App spricht mit der ESP, die ESP mit dem Ladegerät:
+
+    Handy/PC (Browser)  --HTTP/WiFi-->  ESP32  --BLE-->  SkyRC MC5000
+
+> Die native Android-App **BatteryExpert** (Kotlin) ist ein **separates** Programm,
+> das den MC5000 **direkt über BLE** ansteuert — sie läuft **nicht** auf der ESP.
+> Beide teilen sich das reverse-engineered BLE-Protokoll
+> (siehe [`docs/KONZEPT.md`](docs/KONZEPT.md)).
 
 ## Hardware
 
@@ -58,11 +66,19 @@ demselben Gerät. Erst „Trennen" hebt die Auswahl auf.
 
 ## Web-Oberfläche (PWA)
 
-Die Weboberfläche unter `/` ist eine Vanilla-JS-PWA im Verzeichnis `data/`. Sie wird
-separat als LittleFS-Image geflasht (`pio run -e esp32s3 -t uploadfs`). Nicht-`/api/*`-
-Pfade liefert der Server als statische Dateien aus (MIME nach Endung, `sw.js` als
-`application/javascript`). Ohne `uploadfs` fällt `/` auf die eingebettete Setup-Seite
-zurück (Verbindung + WLAN-Setup).
+Die Bedienoberfläche ist eine **Web-App (PWA)** — keine separate App, sondern
+HTML/JavaScript, das **auf der ESP gespeichert** ist und bei jedem Seitenaufruf
+**vom Gerät geladen** wird. Du brauchst also nichts zu installieren: Browser öffnen,
+ESP-IP aufrufen, fertig.
+
+- **Woher sie kommt:** Das Verzeichnis `data/` wird als LittleFS-Image auf die ESP
+  geflasht (`pio run -e esp32s3 -t uploadfs`).
+- **Wo sie läuft:** Im Browser des Handys/PCs, nicht auf der ESP. Die ESP liefert
+  nur die Dateien und die Daten (`/api/*`).
+- **Installierbar:** Über „Zum Startbildschirm hinzufügen" wird sie zur Vollbild-App
+  mit eigenem Icon (`manifest.json` + `sw.js`).
+- **Fallback:** Ohne `uploadfs` liefert `/` nur eine eingebettete Setup-Seite
+  (BLE-Verbindung + WLAN), nicht die volle PWA.
 
 Ansichten: **Dashboard** (Live-Slots), **Zell-Register** (Zellen/Zelltypen),
 **Historie** (Lade-/Entlade-Verläufe) und **Einstellungen** (BLE-Kopplung + WLAN).
