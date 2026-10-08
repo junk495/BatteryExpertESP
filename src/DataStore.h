@@ -82,15 +82,16 @@ public:
     uint32_t currentSeq() const;
 
     // ---- Session-Kopplung (transient, nie im Flash) ----
-    // Ordnet einem physischen Slot (0..3) eine Zellen-ID zu. Vom ApiServer
-    // aufgerufen, wenn die PWA einen Ladevorgang mit cell_id startet.
-    bool assignSlot(int slot, const char* cell_id);
+    // Ordnet einem physischen Slot (0..3) eine Zellen-ID und den gestarteten
+    // Mode zu. Vom ApiServer aufgerufen, wenn die PWA einen Ladevorgang startet.
+    bool assignSlot(int slot, const char* cell_id, const char* mode);
 
     // Schließt einen Slot ab (Flankenerkennung "Completed" im Loop-Task):
     // hängt den Ergebnis-Datensatz an history an (falls eine Zelle zugeordnet
     // ist) und gibt den Slot wieder frei. Die Energie wird aus dem im
-    // pushLivePoint() aufsummierten Leistungs-Integral berechnet; `action`
-    // ist der tatsächliche mode (charge/discharge/...).
+    // pushLivePoint() aufsummierten Leistungs-Integral berechnet. `action`
+    // stammt bevorzugt aus dem beim Start gesetzten Mode (pending_mode);
+    // `action` ist nur ein Fallback.
     void finalizeSlot(int slot, int capacity_mah, int ir_mohm, const char* action);
 
 private:
@@ -101,6 +102,7 @@ private:
     DownsamplingBuffer _buffers[MAX_SLOTS];       // PSRAM-Buffer via allocate()
     BasicJsonDocument<SpiRamAllocator>* _doc = nullptr;  // persistentes Dokument (PSRAM)
     std::string active_cell_ids[MAX_SLOTS];       // transient: Zelle je Slot (leer = frei)
+    std::string pending_mode[MAX_SLOTS];          // transient: gestarteter Mode je Slot (für action)
     int64_t energy_accumulator[MAX_SLOTS] = {0};  // transient: Σ(V_mV × I_mA) je Sekunde (µJ)
     bool _fsReady = false;
     bool _timeReady = false;

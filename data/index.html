@@ -14,6 +14,7 @@
       <button data-view="dashboard" class="active">Dashboard</button>
       <button data-view="register">Zell-Register</button>
       <button data-view="history">Historie</button>
+    <button data-view="settings">Einstellungen</button>
     </nav>
   </header>
 
@@ -66,6 +67,31 @@
           </tr></thead>
           <tbody id="history-body"></tbody>
         </table>
+      </section>
+    </section>
+
+    <!-- Einstellungen -->
+    <section id="view-settings" class="view" hidden>
+      <section class="card">
+        <div class="card-head">
+          <h2>Ladegerät (BLE)</h2>
+          <button id="btn-ble-scan" class="primary">Suchen</button>
+        </div>
+        <p id="settings-ble-state" class="muted">Nicht verbunden</p>
+        <div id="settings-devices"></div>
+        <button id="btn-ble-disconnect" class="danger" hidden>Trennen</button>
+      </section>
+
+      <section class="card">
+        <h2>WLAN</h2>
+        <label>SSID
+          <input id="wifi-ssid" type="text" placeholder="Netzwerkname" autocomplete="off">
+        </label>
+        <label>Passwort
+          <input id="wifi-pass" type="password" placeholder="Passwort" autocomplete="off">
+        </label>
+        <button id="btn-wifi-save" class="primary">WLAN speichern</button>
+        <p id="wifi-status" class="muted">&ndash;</p>
       </section>
     </section>
   </main>

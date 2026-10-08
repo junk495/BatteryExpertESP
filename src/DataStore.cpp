@@ -360,11 +360,12 @@ uint32_t DataStore::currentSeq() const {
 // Session-Kopplung (transient)
 // ---------------------------------------------------------------------------
 
-bool DataStore::assignSlot(int slot, const char* cell_id) {
+bool DataStore::assignSlot(int slot, const char* cell_id, const char* mode) {
     if (slot < 0 || slot >= MAX_SLOTS) {
         return false;
     }
     active_cell_ids[slot] = cell_id ? cell_id : "";
+    pending_mode[slot] = mode ? mode : "";
     energy_accumulator[slot] = 0;   // neuer Laufvorgang -> Integral frisch starten
     return true;
 }
@@ -390,7 +391,13 @@ void DataStore::finalizeSlot(int slot, int capacity_mah, int ir_mohm, const char
     doc["id"] = hid;
     doc["cell_id"] = active_cell_ids[slot].c_str();
     doc["timestamp_s"] = ts;
-    doc["action"] = (action && action[0]) ? action : "charge";
+    // action: bevorzugt der beim Slot-Start gesetzte Mode (Task-Typ). Die Referenz
+    // meldet keinen Mode im 0x91-Status (Zustand wird abgeleitet); der gestartete
+    // Modus ist die verlässliche Quelle. `action` ist nur ein Fallback.
+    const char* eff = pending_mode[slot].empty()
+                          ? (action && action[0] ? action : "charge")
+                          : pending_mode[slot].c_str();
+    doc["action"] = eff;
     doc["capacity_mah"] = capacity_mah;
     doc["energy_mwh"] = energy_mwh;
     doc["ir_mohm"] = ir_mohm;
@@ -400,4 +407,5 @@ void DataStore::finalizeSlot(int slot, int capacity_mah, int ir_mohm, const char
 
     applyMutation(EntityType::HISTORY, OpType::UPSERT, nullptr, body);
     active_cell_ids[slot].clear();
+    pending_mode[slot].clear();
 }

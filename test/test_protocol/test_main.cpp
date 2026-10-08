@@ -186,6 +186,39 @@ void test_buildChargeConfig_modes(void) {
     TEST_ASSERT_EQUAL_UINT8(0x01, pkt[4]);   // Storage = 0x01
 }
 
+// NiMH/NiCd/Eneloop/NiZn verwenden ein verschobenes Mode-Byte-Layout.
+void test_modeCodeForChemistry_nimh(void) {
+    TEST_ASSERT_EQUAL_INT(0, Mc5000Protocol::modeCodeForChemistry("charge", 3));
+    TEST_ASSERT_EQUAL_INT(2, Mc5000Protocol::modeCodeForChemistry("break_in", 3));
+    TEST_ASSERT_EQUAL_INT(3, Mc5000Protocol::modeCodeForChemistry("discharge", 3));
+    TEST_ASSERT_EQUAL_INT(4, Mc5000Protocol::modeCodeForChemistry("cycle", 4));
+    // Li-Chemien bleiben beim Li-Ion-Mapping
+    TEST_ASSERT_EQUAL_INT(2, Mc5000Protocol::modeCodeForChemistry("discharge", 0));
+    TEST_ASSERT_EQUAL_INT(1, Mc5000Protocol::modeCodeForChemistry("storage", 0));
+}
+
+void test_mapModeForChemistry_nimh(void) {
+    TEST_ASSERT_EQUAL_STRING("Charge",    Mc5000Protocol::mapModeForChemistry(0, 3).c_str());
+    TEST_ASSERT_EQUAL_STRING("Break_in",  Mc5000Protocol::mapModeForChemistry(2, 3).c_str());
+    TEST_ASSERT_EQUAL_STRING("Discharge", Mc5000Protocol::mapModeForChemistry(3, 3).c_str());
+    TEST_ASSERT_EQUAL_STRING("Cycle",     Mc5000Protocol::mapModeForChemistry(4, 4).c_str());
+    // Li-Chemien bleiben beim Li-Ion-Mapping
+    TEST_ASSERT_EQUAL_STRING("Discharge", Mc5000Protocol::mapModeForChemistry(2, 0).c_str());
+    TEST_ASSERT_EQUAL_STRING("Cycle",     Mc5000Protocol::mapModeForChemistry(3, 0).c_str());
+}
+
+void test_buildChargeConfig_nimh(void) {
+    ChargeProfile p;
+    p.mode = "discharge";
+    p.dischargeCurrentMa = 1000;
+    auto pkt = codec.buildChargeConfig(p, 3, 2, 3000);   // NiMH
+    TEST_ASSERT_EQUAL_UINT8(0x03, pkt[4]);   // NiMH Discharge = 0x03
+
+    p.mode = "cycle";
+    pkt = codec.buildChargeConfig(p, 4, 3, 3000);        // NiCd
+    TEST_ASSERT_EQUAL_UINT8(0x04, pkt[4]);   // NiCd Cycle = 0x04
+}
+
 int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_buildPacket_checksum);
@@ -200,5 +233,8 @@ int main(int argc, char** argv) {
     RUN_TEST(test_modeCodeFromString);
     RUN_TEST(test_modeRoundTrip);
     RUN_TEST(test_buildChargeConfig_modes);
+    RUN_TEST(test_modeCodeForChemistry_nimh);
+    RUN_TEST(test_mapModeForChemistry_nimh);
+    RUN_TEST(test_buildChargeConfig_nimh);
     return UNITY_END();
 }

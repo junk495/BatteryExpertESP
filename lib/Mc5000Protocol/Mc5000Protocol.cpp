@@ -51,7 +51,7 @@ Mc5000Protocol::Packet Mc5000Protocol::buildChargeConfig(
     packet[1] = 0x2A;   // Länge = 42
     packet[2] = 0x94;
     packet[3] = static_cast<uint8_t>(slotBitmask);
-    packet[4] = static_cast<uint8_t>(modeCodeFromString(profile.mode));
+    packet[4] = static_cast<uint8_t>(modeCodeForChemistry(profile.mode, chemistryCode));
 
     auto putU16 = [&packet](size_t offset, int value) {
         packet[offset]     = static_cast<uint8_t>((value >> 8) & 0xFF);
@@ -123,9 +123,10 @@ SlotStatus Mc5000Protocol::parseStatus(const Packet& p) const {
     s.elapsedSeconds = readUInt(p, 12);
     s.internalResistanceMOhm = readUShort(p, 16);
     s.status = mapStatus(readByte(p, 18));
-    s.mode = mapMode(readByte(p, 19));
     s.error = mapError(readByte(p, 20));
-    s.chemistry = mapChemistry(readByte(p, 21));
+    const int chemCode = readByte(p, 21);
+    s.mode = mapModeForChemistry(readByte(p, 19), chemCode);
+    s.chemistry = mapChemistry(chemCode);
     return s;
 }
 
@@ -178,6 +179,28 @@ int Mc5000Protocol::modeCodeFromString(const std::string& mode) {
     return 0;
 }
 
+// NiMH/NiCd/Eneloop/NiZn verwenden ein anderes Mode-Byte-Layout als die Li-Chemien
+// (vgl. rssdev10/skyrc-mc-rs, OperationMode::to_byte_for_chemistry).
+static bool isNimhGroup(int chemistryCode) {
+    return chemistryCode == 3 || chemistryCode == 4 || chemistryCode == 5 || chemistryCode == 6;
+}
+
+int Mc5000Protocol::modeCodeForChemistry(const std::string& mode, int chemistryCode) {
+    if (!isNimhGroup(chemistryCode)) {
+        return modeCodeFromString(mode);   // Li-Ion-Mapping (Standard)
+    }
+    const std::string m = toLower(mode);
+    // NiMH/NiCd: 0=Charge, 1=Refresh, 2=BreakIn, 3=Discharge, 4=Cycle.
+    // TODO: verifizieren — Referenz ist bei Refresh inkonsistent (Doc 0x05 vs. Code 0x01).
+    if (m == "charge" || m == "normal charge" || m == "laden") return 0;
+    if (m == "break_in" || m == "break-in" || m == "formieren") return 2;
+    if (m == "discharge" || m == "entladen") return 3;
+    if (m == "cycle" || m == "zyklus") return 4;
+    if (m == "refresh" || m == "auffrischen") return 1;
+    if (m == "storage" || m == "lagerung") return 1;   // nicht typisch für NiMH
+    return 0;
+}
+
 std::string Mc5000Protocol::mapChemistry(int code) {
     switch (code) {
         case 0: return "Li-Ion";
@@ -217,6 +240,20 @@ std::string Mc5000Protocol::mapMode(int code) {
         case 3: return "Cycle";
         case 4: return "Refresh";
         case 5: return "Break_in";
+        default: return "Mode " + std::to_string(code);
+    }
+}
+
+std::string Mc5000Protocol::mapModeForChemistry(int code, int chemistryCode) {
+    if (!isNimhGroup(chemistryCode)) {
+        return mapMode(code);   // Li-Ion-Mapping (Standard)
+    }
+    switch (code) {
+        case 0: return "Charge";
+        case 1: return "Refresh";   // TODO: verifizieren (kollidiert mit Storage)
+        case 2: return "Break_in";
+        case 3: return "Discharge";
+        case 4: return "Cycle";
         default: return "Mode " + std::to_string(code);
     }
 }

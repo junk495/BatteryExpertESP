@@ -342,6 +342,82 @@ async function deleteEntity(entity, id) {
   await api(`${collection}/${encodeURIComponent(id)}`, 'DELETE');
 }
 
+// --- settings (BLE + WLAN) ---------------------------------------------------
+
+async function renderSettings() {
+  await Promise.all([renderSettingsBle(), renderSettingsWifi()]);
+}
+
+async function renderSettingsBle() {
+  const info = await api('/api/info');
+  const el = document.getElementById('settings-ble-state');
+  const btnDisc = document.getElementById('btn-ble-disconnect');
+  if (info.bleConnected) {
+    el.textContent = 'Verbunden mit ' + (info.address || '?');
+    btnDisc.hidden = false;
+  } else {
+    el.textContent = info.address
+      ? ('Nicht verbunden (gespeichert: ' + info.address + ')')
+      : 'Nicht verbunden';
+    btnDisc.hidden = !info.address;
+  }
+}
+
+async function scanBle() {
+  const el = document.getElementById('settings-ble-state');
+  el.textContent = 'Suche ...';
+  const res = await api('/api/scan');
+  const list = document.getElementById('settings-devices');
+  list.innerHTML = '';
+  const devices = res.devices || [];
+  if (devices.length === 0) {
+    el.textContent = 'Keine Geräte gefunden.';
+    return;
+  }
+  for (const d of devices) {
+    const row = document.createElement('div');
+    row.className = 'device';
+    row.innerHTML = `<span>${esc(d.name || '(ohne Name)')}</span>` +
+      `<code>${esc(d.address)}</code>`;
+    const btn = document.createElement('button');
+    btn.className = 'primary';
+    btn.textContent = 'Verbinden';
+    btn.addEventListener('click', () => connectBle(d.address));
+    row.appendChild(btn);
+    list.appendChild(row);
+  }
+  el.textContent = devices.length + ' Gerät(e) gefunden.';
+}
+
+async function connectBle(address) {
+  const el = document.getElementById('settings-ble-state');
+  el.textContent = 'Verbinde ...';
+  await api('/api/connect', 'POST', { address });
+  await renderSettingsBle();
+}
+
+async function disconnectBle() {
+  await api('/api/disconnect', 'POST');
+  await renderSettingsBle();
+}
+
+async function renderSettingsWifi() {
+  const w = await api('/api/wifi');
+  const el = document.getElementById('wifi-status');
+  el.textContent = w.connected
+    ? 'Verbunden mit ' + w.ssid + ' (' + w.ip + ')'
+    : 'Nicht verbunden';
+}
+
+async function saveWifi() {
+  const ssid = document.getElementById('wifi-ssid').value;
+  const password = document.getElementById('wifi-pass').value;
+  if (!ssid) return;
+  await api('/api/wifi', 'POST', { ssid, password });
+  document.getElementById('wifi-pass').value = '';
+  await renderSettingsWifi();
+}
+
 // --- nav ---------------------------------------------------------------------
 
 function switchView(name) {
@@ -353,6 +429,7 @@ function switchView(name) {
   }
   if (name === 'register') renderRegister();
   if (name === 'history') renderHistory();
+  if (name === 'settings') renderSettings();
 }
 
 // --- init --------------------------------------------------------------------
@@ -377,6 +454,11 @@ function init() {
   document.getElementById('entity-modal-save').addEventListener('click', saveEntity);
   document.getElementById('btn-add-type').addEventListener('click', () => openEntityModal('type'));
   document.getElementById('btn-add-cell').addEventListener('click', () => openEntityModal('cell'));
+
+  // settings (BLE + WLAN)
+  document.getElementById('btn-ble-scan').addEventListener('click', scanBle);
+  document.getElementById('btn-ble-disconnect').addEventListener('click', disconnectBle);
+  document.getElementById('btn-wifi-save').addEventListener('click', saveWifi);
 
   // table actions (event delegation)
   document.getElementById('types-body').addEventListener('click', onRowAction('type'));

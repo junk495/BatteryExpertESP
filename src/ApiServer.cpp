@@ -232,9 +232,10 @@ void ApiServer::begin() {
         JsonObject obj = doc.as<JsonObject>();
         // Session-Kopplung: Zelle dem Slot zuordnen (transient).
         const char* cell_id = obj["cell_id"] | "";
+        const char* mode = obj["mode"] | "charge";
         const int slot = obj["slot"] | 0;
         if (cell_id[0] != '\0' && slot >= 1 && slot <= 4) {
-            _store.assignSlot(slot - 1, cell_id);
+            _store.assignSlot(slot - 1, cell_id, mode);
         }
         bool ok = chargeHandler ? chargeHandler(obj) : false;
         _server.send(ok ? 200 : 502, "application/json",

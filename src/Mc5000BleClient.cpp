@@ -2,12 +2,25 @@
 
 #include <NimBLEDevice.h>
 
+#include "config.h"
+
 namespace {
 // Same as the Android app (Mc5000BleManager.kt).
 const NimBLEUUID SERVICE_UUID("0000ffe0-0000-1000-8000-00805f9b34fb");
 const NimBLEUUID CHAR_UUID("0000ffe1-0000-1000-8000-00805f9b34fb");
 constexpr int REQUESTED_MTU = 247;
 }
+
+#if MC5000_DEBUG_RAW
+// Raw TX/RX hex dump for protocol verification against the real device.
+static void dumpBytes(const char* tag, const uint8_t* data, size_t len) {
+    Serial.printf("[ble %s] %uB:", tag, (unsigned)len);
+    for (size_t i = 0; i < len; ++i) {
+        Serial.printf(" %02X", data[i]);
+    }
+    Serial.println();
+}
+#endif
 
 void Mc5000BleClient::begin(const std::string& deviceName) {
     NimBLEDevice::init(deviceName);
@@ -78,6 +91,9 @@ bool Mc5000BleClient::connect(const std::string& address) {
     }
 
     chr->subscribe(true, [this](NimBLERemoteCharacteristic*, uint8_t* data, size_t len, bool) {
+#if MC5000_DEBUG_RAW
+        dumpBytes("rx", data, len);
+#endif
         if (_onNotify && len > 0) {
             _onNotify(std::vector<uint8_t>(data, data + len));
         }
@@ -93,5 +109,8 @@ bool Mc5000BleClient::writePacket(const std::vector<uint8_t>& data) {
     if (!isConnected() || !_chr) {
         return false;
     }
+#if MC5000_DEBUG_RAW
+    dumpBytes("tx", data.data(), data.size());
+#endif
     return _chr->writeValue(data.data(), data.size(), false);   // false = no response
 }

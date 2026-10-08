@@ -15,6 +15,9 @@ Verbindliche Regeln für die Arbeit an diesem Repository (ESP32-Firmware).
 - Native Codec-Unit-Tests: `pio test -e test` (benötigt einen Host-C++-Compiler)
 - Keine zwei Builds parallel starten (PlatformIO-Lock).
 - Erste Builds dauern mehrere Minuten (285-MB-Core-Libs-Download + voller Arduino-Core).
+- **Builds/Tests werden manuell ausgeführt** (nicht vom Agent): Der Agent startet
+  keine `pio`-Builds selbst. Auftretende Build-/Testfehler werden vom Nutzer als
+  Text in den Chat kopiert und dort vom Agent analysiert.
 
 ## Struktur-Konventionen
 

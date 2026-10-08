@@ -21,3 +21,9 @@
 
 // ---- WiFi-Verbindungstimeout ----
 #define WIFI_CONNECT_TIMEOUT_MS 15000
+
+// ---- Debug ----
+// 1 = BLE-GATT-Werte (TX/RX) hexadezimal auf den seriellen Monitor ausgeben.
+// Sicht der NimBLE-Anwendungsschicht (nach L2CAP/ATT) — nicht die rohe Funk-Ebene.
+// Für die Protokoll-Verifikation am echten Gerät (z. B. NiMH-Mode-Byte).
+#define MC5000_DEBUG_RAW   0

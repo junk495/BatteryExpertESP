@@ -16,7 +16,8 @@ Das System entkoppelt drei Aufgaben sauber:
 
 **Zustandsmodell:** Der dauerhafte Systemzustand liegt als JSON-Dokument dauerhaft im
 PSRAM. Änderungen werden erst nach Validierung als neuer Checkpoint in den Flash
-(LittleFS) geschrieben.
+(LittleFS) geschrieben. Dasselbe LittleFS-Dateisystem hält zusätzlich die statischen
+PWA-Assets (`data/`), die der `ApiServer` als Weboberfläche ausliefert.
 
 **Inkrementelle Checkpoints:** Jeder gültige Zustandswechsel erhöht einen monoton
 steigenden `sequence_id`.

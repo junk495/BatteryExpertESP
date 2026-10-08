@@ -27,6 +27,7 @@ Macht das Gerät über eine einfache HTTP/JSON-Schnittstelle im WLAN erreichbar.
    ```powershell
    pio run -e esp32s3
    pio run -e esp32s3 -t upload
+   pio run -e esp32s3 -t uploadfs   # PWA (data/) ins LittleFS flashen
    ```
 
 2. Beim ersten Start sind keine WLAN-Zugangsdaten hinterlegt, daher startet
@@ -47,19 +48,30 @@ Macht das Gerät über eine einfache HTTP/JSON-Schnittstelle im WLAN erreichbar.
 
 ## Verbindung zum Ladegerät
 
-1. Im Browser `http://mc5000-bridge.local` öffnen (Verbindungsseite).
-2. „Nach Geräten suchen" klicken und das Ladegerät in der Liste wählen.
+1. Im Browser `http://mc5000-bridge.local` öffnen und den Reiter „Einstellungen" wählen.
+2. Unter „Ladegerät (BLE)" auf „Suchen" klicken und das Gerät in der Liste wählen.
 3. „Verbinden" klicken.
 
 Die gewählte MAC-Adresse wird **persistent gespeichert**: Nach einem Neustart
 oder Verbindungsverlust verbindet sich die Bridge automatisch wieder mit
 demselben Gerät. Erst „Trennen" hebt die Auswahl auf.
 
+## Web-Oberfläche (PWA)
+
+Die Weboberfläche unter `/` ist eine Vanilla-JS-PWA im Verzeichnis `data/`. Sie wird
+separat als LittleFS-Image geflasht (`pio run -e esp32s3 -t uploadfs`). Nicht-`/api/*`-
+Pfade liefert der Server als statische Dateien aus (MIME nach Endung, `sw.js` als
+`application/javascript`). Ohne `uploadfs` fällt `/` auf die eingebettete Setup-Seite
+zurück (Verbindung + WLAN-Setup).
+
+Ansichten: **Dashboard** (Live-Slots), **Zell-Register** (Zellen/Zelltypen),
+**Historie** (Lade-/Entlade-Verläufe) und **Einstellungen** (BLE-Kopplung + WLAN).
+
 ## REST-API
 
 | Methode | Pfad              | Body                            | Zweck                               |
 |---------|-------------------|---------------------------------|-------------------------------------|
-| GET     | `/`               | –                               | Webseite (Verbindung + WLAN-Setup)  |
+| GET     | `/`               | –                               | PWA (aus LittleFS)  |
 | GET     | `/api/info`       | –                               | Geräte-/Verbindungsinfo             |
 | GET     | `/api/status`     | –                               | Status aller 4 Slots                |
 | GET     | `/api/scan`       | –                               | BLE-Geräte suchen (Liste)           |
@@ -98,8 +110,8 @@ curl -X POST http://mc5000-bridge.local/api/startstop -H "Content-Type: applicat
 
 ## Tests
 
-Die reine Protokollschicht (`lib/Mc5000Protocol`) ist nativ testbar (analog
-`ProtocolCodecTest.kt` der App):
+Die hardwareunabhängigen Bibliotheken sind nativ testbar (analog
+`ProtocolCodecTest.kt` der App) — Codec, Change-Log (Delta-Sync) und Downsampling:
 
 ```powershell
 pio test -e test
@@ -112,11 +124,13 @@ pio test -e test
 ## Projektstruktur
 
 ```
-lib/Mc5000Protocol/   reine Protokollschicht (Codec, nativ testbar)
+data/                 PWA-Webclient (wird ins LittleFS geflasht)
+lib/                  reine, hardwareunabhängige Bibliotheken (nativ testbar)
 src/main.cpp          Wiring: WiFi + BLE + HTTP + Polling
 src/Mc5000BleClient   BLE-Central (Scan/Connect/Notify/Write)
-src/ApiServer         REST-Endpoints
+src/DataStore         persistente Datenhaltung (LittleFS-Checkpoint, Delta-Sync)
+src/ApiServer         REST-Endpoints + PWA-Serving
 include/config.h      Defaults (ohne Zugangsdaten)
-test/test_protocol    native Unit-Tests (Unity)
+test/                 native Unit-Tests (Unity, 3 Suiten)
 docs/KONZEPT.md       Konzept & Protokoll-Referenz
 ```

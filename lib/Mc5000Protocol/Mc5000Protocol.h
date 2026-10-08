@@ -68,6 +68,8 @@ public:
     static std::string mapMode(int code);
     static std::string mapError(int code);
     static int modeCodeFromString(const std::string& mode);
+    static std::string mapModeForChemistry(int code, int chemistryCode);
+    static int modeCodeForChemistry(const std::string& mode, int chemistryCode);
 
 private:
     static int readByte(const Packet& packet, size_t index, int def = 0);

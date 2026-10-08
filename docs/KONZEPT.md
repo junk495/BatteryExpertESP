@@ -34,6 +34,7 @@ ansteuert. Diese Bridge macht das Ladegerät über **HTTP/JSON im WLAN** erreich
 | BLE       | NimBLE-Arduino (^2.x)                | leichtgewichtiger BLE-Central, kompatibel mit Core 3.x  |
 | HTTP      | `WebServer.h` (im Arduino-Core)      | synchron, einfach, im Core enthalten                    |
 | JSON      | ArduinoJson (^6.x)                   | Standard                                                |
+| Filesystem| LittleFS (im Arduino-Core)           | PWA-Assets + JSON-Checkpoint                            |
 | Tests     | Unity (native)                       | reine Protokollschicht ohne Hardware testbar            |
 
 > **Hinweis Core-Version:** vorausgesetzt wird `espressif32` ≥ 6.x → **Arduino-Core 3.x**
@@ -49,14 +50,25 @@ ansteuert. Diese Bridge macht das Ladegerät über **HTTP/JSON im WLAN** erreich
 BatteryExpertESP/
 ├── platformio.ini
 ├── include/config.h                  # Defaults (ohne Zugangsdaten)
-├── lib/Mc5000Protocol/               # reine Protokollschicht (nativ testbar)
-│   ├── Mc5000Protocol.h
-│   └── Mc5000Protocol.cpp
+├── data/                             # PWA-Webclient (wird ins LittleFS geflasht)
+│   ├── index.html
+│   ├── manifest.json
+│   ├── sw.js
+│   ├── css/app.css
+│   └── js/{state,sync,ui}.js
+├── lib/                              # reine, hardwareunabhängige Bibliotheken (nativ testbar)
+│   ├── Mc5000Protocol/               # Protokoll-Codec
+│   ├── BoundedChangeLog/             # Delta-Engine (sequenzbasiert)
+│   └── DownsamplingBuffer/           # Live-Messreihen-Ausdünnung
 ├── src/
 │   ├── main.cpp                      # Wiring: WiFi + BLE + HTTP + Polling
 │   ├── Mc5000BleClient.h/.cpp        # BLE-Central (Scan/Connect/Notify/Write)
-│   └── ApiServer.h/.cpp              # REST-Endpoints
-├── test/test_protocol/test_main.cpp  # native Unit-Tests (Unity)
+│   ├── DataStore.h/.cpp              # persistente Datenhaltung (LittleFS-Checkpoint, Delta-Sync)
+│   └── ApiServer.h/.cpp              # REST-Endpoints + PWA-Serving
+├── test/                             # native Unity-Tests (3 Suiten)
+│   ├── test_protocol/                # Codec
+│   ├── test_changelog/               # Delta-Sync
+│   └── test_downsample/              # Ausdünnung
 └── docs/KONZEPT.md
 ```
 
@@ -98,6 +110,10 @@ BatteryExpertESP/
 
 - **Chemie:** `0=Li-Ion, 1=Li-Ion HV, 2=LiFePO4, 3=NiMH, 4=NiCd, 5=Eneloop, 6=NiZn, 7=RAM, 8=LTO, 9=Na-Ion`
 - **Status:** `0=Standby, 1=Processing, 2=Charging, 3=Discharging, 4=Resting, 5/6=Completed`
+- **Mode:** `0=Charge, 1=Storage, 2=Discharge, 3=Cycle, 4=Refresh, 5=Break-in`
+  (Li-Ion-Mapping, verifiziert gegen `rssdev10/skyrc-mc-rs`)
+- **Mode (NiMH/NiCd/Eneloop/NiZn):** verschobenes Layout `0=Charge, 1=Refresh,
+  2=Break-in, 3=Discharge, 4=Cycle` (`Refresh`-Wert noch zu verifizieren)
 
 ### `0x93`-Aktionen
 
@@ -107,7 +123,7 @@ BatteryExpertESP/
 
 | Methode | Pfad              | Body                            | Zweck                             |
 |---------|-------------------|---------------------------------|-----------------------------------|
-| GET     | `/`               | –                               | Webseite (Verbindung + WLAN-Setup)|
+| GET     | `/`               | –                               | PWA (aus LittleFS)|
 | GET     | `/api/info`      | –                               | Geräte-/Verbindungsinfo           |
 | GET     | `/api/status`    | –                               | Status aller 4 Slots (JSON)       |
 | GET     | `/api/scan`      | –                               | BLE-Geräte suchen (Liste)         |
@@ -121,6 +137,11 @@ BatteryExpertESP/
 Persistenz (NVS): die gewählte BLE-MAC-Adresse und die WLAN-Zugangsdaten werden
 auf dem Gerät gespeichert – nicht im Code. Die Bridge verbindet sich nach
 Neustart/Verbindungsverlust automatisch wieder, bis explizit getrennt wird.
+
+Die Weboberfläche unter `/` ist eine **PWA** (Vanilla JS) im Verzeichnis `data/`,
+die aus dem LittleFS ausgeliefert wird (`pio run -e esp32s3 -t uploadfs`).
+Nicht-`/api/*`-Pfade werden als statische Dateien serviert (MIME-Typ nach Endung,
+`sw.js` → `application/javascript`).
 
 `POST /api/charge` (Felder optional, Defaults in Klammern):
 
@@ -154,6 +175,10 @@ Neustart/Verbindungsverlust automatisch wieder, bis explizit getrennt wird.
 2. **`0x25`-Handshake** evtl. nötig, um Schreib-Kommandos zu „entriegeln".
 3. **BLE↔WiFi-Koexistenz** (2,4 GHz teilen sich das Funkmodul) → Polling nicht zu aggressiv.
 4. **Notification-Kürzung** auf 20 Bytes (Default-MTU) → Parser robust gehalten.
+5. **`0x91`-Status-Mode-Byte unverifiziert:** Die Rust-Referenz meldet im Status kein
+   eigenes Mode-Byte (Zustand wird aus Strom/Spannung abgeleitet, Richtung über den
+   Task-Typ). Die `action`-Historie nutzt deshalb den beim Start gesetzten Modus,
+   nicht das Status-Byte.
 
 → **Phase 1 = Protokoll-Codec + Unit-Tests** (Fundament), danach gegen das echte
 Gerät validieren (wie bei der App: „Phase 1 = Protokoll-Spike mit Debug-Screen").
