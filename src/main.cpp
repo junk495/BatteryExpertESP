@@ -124,12 +124,13 @@ static String buildStatusJson() {
 }
 
 static String buildInfoJson() {
-    DynamicJsonDocument doc(256);
+    DynamicJsonDocument doc(384);
     doc["device"] = "mc5000-bridge";
     doc["hostname"] = HOSTNAME;
     doc["bleConnected"] = g_ble.isConnected();
     doc["address"] = g_bleAddress;
     doc["slots"] = 4;
+    doc["version"] = FW_VERSION;
     String out;
     serializeJson(doc, out);
     return out;

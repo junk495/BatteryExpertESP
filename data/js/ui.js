@@ -418,6 +418,37 @@ async function saveWifi() {
   await renderSettingsWifi();
 }
 
+// --- update (version) ---------------------------------------------------------
+
+const VERSION_KEY = 'batteryexpert-version';
+
+async function checkVersion() {
+  try {
+    const info = await api('/api/info');
+    const v = info.version;
+    if (!v) return;
+    const known = localStorage.getItem(VERSION_KEY);
+    if (known === null) {
+      localStorage.setItem(VERSION_KEY, v);   // erster Start: Version merken
+    } else if (known !== v) {
+      const el = document.getElementById('update-banner');
+      if (el) el.hidden = false;               // neue Version verfügbar
+    }
+  } catch (e) {
+    // Netzwerk-Fehler ignorieren — der nächste Poll prüft erneut.
+  }
+}
+
+async function applyUpdate() {
+  try {
+    const info = await api('/api/info');
+    if (info.version) localStorage.setItem(VERSION_KEY, info.version);
+  } catch (e) {
+    // ignorieren — reload lädt dank network-first SW ohnehin frisch.
+  }
+  location.reload();
+}
+
 // --- nav ---------------------------------------------------------------------
 
 function switchView(name) {
@@ -459,6 +490,11 @@ function init() {
   document.getElementById('btn-ble-scan').addEventListener('click', scanBle);
   document.getElementById('btn-ble-disconnect').addEventListener('click', disconnectBle);
   document.getElementById('btn-wifi-save').addEventListener('click', saveWifi);
+
+  // update (version)
+  document.getElementById('btn-update').addEventListener('click', applyUpdate);
+  checkVersion();
+  setInterval(checkVersion, 30000);
 
   // table actions (event delegation)
   document.getElementById('types-body').addEventListener('click', onRowAction('type'));

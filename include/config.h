@@ -4,6 +4,11 @@
 // Hinweis: WLAN-Zugangsdaten werden NICHT im Code abgelegt. Sie werden über
 // die Weboberfläche eingegeben und nur auf dem Gerät (NVS) gespeichert.
 
+// ---- Version ----
+// Wird unter /api/info als "version" ausgeliefert. Bei jedem Release erhöhen —
+// die PWA zeigt dann den Update-Hinweis an.
+#define FW_VERSION      "0.1.0"
+
 // ---- Fallback-Access-Point (für die Ersteinrichtung) ----
 // Wird gestartet, wenn keine WLAN-Zugangsdaten hinterlegt sind oder die
 // Verbindung fehlschlägt. Über diesen offenen AP wird die Weboberfläche

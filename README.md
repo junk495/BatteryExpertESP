@@ -83,6 +83,11 @@ ESP-IP aufrufen, fertig.
 Ansichten: **Dashboard** (Live-Slots), **Zell-Register** (Zellen/Zelltypen),
 **Historie** (Lade-/Entlade-Verläufe) und **Einstellungen** (BLE-Kopplung + WLAN).
 
+**Updates:** Nach einem Neu-Flash erkennt die App die neue Version automatisch
+(über `/api/info`) und zeigt „Neue Version verfügbar" mit „Neu laden". Dazu bei
+jedem Release die Version in `include/config.h` (`FW_VERSION`) und die
+Cache-Version in `data/sw.js` (`CACHE`) erhöhen.
+
 ## REST-API
 
 | Methode | Pfad              | Body                            | Zweck                               |
