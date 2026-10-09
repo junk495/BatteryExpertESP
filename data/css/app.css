@@ -213,20 +213,27 @@ main { max-width: 960px; margin: 1.25rem auto; padding: 0 1rem 5.5rem; }
 
 .slot-error { margin: 0.75rem 0 0; color: var(--danger); font-size: 0.88rem; }
 
-.spark { display: block; width: 100%; height: 32px; margin-top: 0.75rem; }
-.spark polyline { fill: none; }
-.spark-legend {
-  display: flex;
-  justify-content: center;
-  gap: 1rem;
-  margin-top: 0.4rem;
+.chart-title {
+  margin-top: 0.85rem;
+  margin-bottom: 0.35rem;
   font-size: 0.72rem;
   color: var(--muted);
 }
-.spark-legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
-.spark-legend .sw { width: 10px; height: 3px; border-radius: 2px; }
-.spark-legend .sw-v { background: #1e88e5; }
-.spark-legend .sw-c { background: #e53935; }
+.chart { display: block; width: 100%; height: auto; aspect-ratio: 320 / 140; }
+.chart .grid { stroke: var(--border); stroke-width: 1; opacity: 0.5; }
+.chart .axis-y, .chart .axis-x { fill: var(--muted); font-size: 10px; }
+.chart-legend {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.chart-legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.chart-legend .sw { width: 10px; height: 3px; border-radius: 2px; }
+.chart-legend .sw-v { background: #1e88e5; }
+.chart-legend .sw-c { background: #e53935; }
 
 /* Tabellen */
 table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }

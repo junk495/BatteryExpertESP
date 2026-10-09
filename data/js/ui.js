@@ -61,27 +61,98 @@ async function api(path, method = 'GET', body) {
   return resp.json().catch(() => ({}));
 }
 
-function sparkline(points) {
-  const vs = points.map((p) => p[1]);   // voltage_mv
-  const cs = points.map((p) => p[2]);   // current_ma
-  if (vs.length < 2) return '';
+function niceMinuteStep(totalMinutes) {
+  const steps = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720];
+  if (totalMinutes <= 0) return 1;
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const s = steps[i];
+    const ticks = totalMinutes / s;
+    if (ticks >= 4 && ticks <= 10) return s;
+  }
+  return steps[0];
+}
 
-  const w = 110;
-  const h = 30;
-  const line = (series, color) => {
-    const max = Math.max(...series);
-    const min = Math.min(...series);
-    const range = max - min || 1;
-    const coords = series
-      .map((v, i) => `${(i / (series.length - 1) * w).toFixed(1)},${(h - ((v - min) / range) * h).toFixed(1)}`)
-      .join(' ');
-    return `<polyline points="${coords}" fill="none" stroke="${color}" stroke-width="1.5"/>`;
-  };
+function fmtAxisMin(minutes) {
+  const m = Math.round(minutes);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return mm === 0 ? `${h} h` : `${h} h ${mm} min`;
+}
 
-  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">` +
-    `${line(cs, '#e53935')}${line(vs, '#1e88e5')}</svg>` +
-    `<div class="spark-legend"><span><i class="sw sw-v"></i>Spannung</span>` +
-    `<span><i class="sw sw-c"></i>Strom</span></div>`;
+function niceTicks(min, max, n) {
+  const range = max - min;
+  if (!(range > 0)) return [min];
+  const rawStep = range / (n - 1);
+  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const norm = rawStep / mag;
+  const step = (norm < 1.5 ? 1 : norm < 3.5 ? 2 : norm < 7.5 ? 5 : 10) * mag;
+  const start = Math.ceil(min / step) * step;
+  const ticks = [];
+  for (let v = start; v <= max + step * 1e-6; v += step) ticks.push(Number(v.toFixed(4)));
+  return ticks;
+}
+
+function fmtAxisY(v) {
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+}
+
+function renderChart(points) {
+  if (!points || points.length < 2) return '';
+
+  const t0 = points[0][0];
+  const rows = points.map((p) => ({
+    t: (p[0] - t0) / 60,   // minutes
+    v: p[1] / 1000,        // V
+    c: p[2] / 1000,        // A
+  }));
+
+  const vMin = Math.min(...rows.map((r) => r.v));
+  const vMax = Math.max(...rows.map((r) => r.v));
+  const cMin = Math.min(...rows.map((r) => r.c));
+  const cMax = Math.max(...rows.map((r) => r.c));
+  let yMin = Math.min(vMin, cMin);
+  let yMax = Math.max(vMax, cMax);
+  if (yMax - yMin < 0.5) { const mid = (yMax + yMin) / 2; yMin = mid - 0.25; yMax = mid + 0.25; }
+
+  const yTicks = niceTicks(yMin, yMax, 4);
+
+  const xMax = Math.max(rows[rows.length - 1].t, 1);
+  const xStep = niceMinuteStep(xMax);
+  const xTicks = [];
+  for (let m = 0; m <= xMax + 1e-6; m += xStep) xTicks.push(m);
+
+  const padL = 38, padB = 20, padT = 6, padR = 6;
+  const W = 320, H = 140;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  const x = (t) => padL + (t / xMax) * plotW;
+  const y = (val) => padT + ((yMax - val) / (yMax - yMin)) * plotH;
+
+  const line = (getter, color) =>
+    `<polyline points="${rows.map((r) => `${x(r.t).toFixed(1)},${y(getter(r)).toFixed(1)}`).join(' ')}" ` +
+    `fill="none" stroke="${color}" stroke-width="1.5"/>`;
+
+  const grid = yTicks.map((t) => {
+    const yy = y(t).toFixed(1);
+    return `<line x1="${padL}" y1="${yy}" x2="${W - padR}" y2="${yy}" class="grid"/>` +
+      `<text x="${padL - 6}" y="${yy}" class="axis-y" dy="0.32em" text-anchor="end">${fmtAxisY(t)}</text>`;
+  }).join('');
+
+  const xgrid = xTicks.map((t) => {
+    const xx = x(t).toFixed(1);
+    return `<line x1="${xx}" y1="${padT}" x2="${xx}" y2="${padT + plotH}" class="grid"/>` +
+      `<text x="${xx}" y="${H - 4}" class="axis-x" text-anchor="middle">${fmtAxisMin(t)}</text>`;
+  }).join('');
+
+  return `<div class="chart-title">Spannungs- & Stromverlauf (Live)</div>` +
+    `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">` +
+    grid + xgrid +
+    line((r) => r.c, '#e53935') + line((r) => r.v, '#1e88e5') +
+    `</svg>` +
+    `<div class="chart-legend"><span><i class="sw sw-v"></i>Spannung (V)</span>` +
+    `<span><i class="sw sw-c"></i>Strom (A)</span></div>`;
 }
 
 // --- dashboard ---------------------------------------------------------------
@@ -130,7 +201,7 @@ function renderSlot(num, s, points) {
       <div class="metric"><span class="k">Chemie</span><span class="v">${esc(s.chemistry)}</span></div>
     </div>
     ${err}
-    ${sparkline(points)}`;
+    ${renderChart(points)}`;
   return el;
 }
 
