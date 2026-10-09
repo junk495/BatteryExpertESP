@@ -63,17 +63,25 @@ async function api(path, method = 'GET', body) {
 
 function sparkline(points) {
   const vs = points.map((p) => p[1]);   // voltage_mv
+  const cs = points.map((p) => p[2]);   // current_ma
   if (vs.length < 2) return '';
-  const max = Math.max(...vs);
-  const min = Math.min(...vs);
-  const range = max - min || 1;
+
   const w = 110;
   const h = 30;
-  const coords = vs
-    .map((v, i) => `${(i / (vs.length - 1) * w).toFixed(1)},${(h - ((v - min) / range) * h).toFixed(1)}`)
-    .join(' ');
+  const line = (series, color) => {
+    const max = Math.max(...series);
+    const min = Math.min(...series);
+    const range = max - min || 1;
+    const coords = series
+      .map((v, i) => `${(i / (series.length - 1) * w).toFixed(1)},${(h - ((v - min) / range) * h).toFixed(1)}`)
+      .join(' ');
+    return `<polyline points="${coords}" fill="none" stroke="${color}" stroke-width="1.5"/>`;
+  };
+
   return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">` +
-    `<polyline points="${coords}" fill="none" stroke-width="1.5"/></svg>`;
+    `${line(cs, '#e53935')}${line(vs, '#1e88e5')}</svg>` +
+    `<div class="spark-legend"><span><i class="sw sw-v"></i>Spannung</span>` +
+    `<span><i class="sw sw-c"></i>Strom</span></div>`;
 }
 
 // --- dashboard ---------------------------------------------------------------
@@ -104,17 +112,24 @@ function renderSlot(num, s, points) {
     return el;
   }
 
-  el.className = 'slot ' + esc(s.status);
+  el.className = 'slot';
+  const err = s.error ? `<p class="slot-error">Fehler: ${esc(s.error)}</p>` : '';
   el.innerHTML = `
-    <h3>Slot ${num}</h3>
-    <div class="status ${esc(s.status)}">${esc(s.status)}</div>
-    <div class="row"><span class="k">Modus</span><span>${esc(s.mode)}</span></div>
-    <div class="row"><span class="k">Spannung</span><span>${(s.voltageV || 0).toFixed(3)} V</span></div>
-    <div class="row"><span class="k">Strom</span><span>${(s.currentA || 0).toFixed(3)} A</span></div>
-    <div class="row"><span class="k">Kapazit\u00e4t</span><span>${s.capacityMah ?? 0} mAh</span></div>
-    <div class="row"><span class="k">Temp</span><span>${(s.temperatureC || 0).toFixed(1)} \u00b0C</span></div>
-    <div class="row"><span class="k">IR</span><span>${s.internalResistanceMOhm ?? 0} m\u03a9</span></div>
-    <div class="row"><span class="k">Zeit</span><span>${fmtElapsed(s.elapsedSeconds)}</span></div>
+    <div class="slot-head">
+      <h3>Slot ${num}</h3>
+      <span class="status-pill ${esc(s.status)}"><i class="dot"></i>${esc(s.status)}</span>
+    </div>
+    <div class="metrics">
+      <div class="metric"><span class="k">Spannung</span><span class="v">${(s.voltageV || 0).toFixed(3)} V</span></div>
+      <div class="metric"><span class="k">Strom</span><span class="v">${(s.currentA || 0).toFixed(3)} A</span></div>
+      <div class="metric"><span class="k">Temp.</span><span class="v">${(s.temperatureC || 0).toFixed(1)} \u00b0C</span></div>
+      <div class="metric"><span class="k">Kapazit\u00e4t</span><span class="v">${s.capacityMah ?? 0} mAh</span></div>
+      <div class="metric"><span class="k">Zeit</span><span class="v">${fmtElapsed(s.elapsedSeconds)}</span></div>
+      <div class="metric"><span class="k">Innenwiderstand</span><span class="v">${s.internalResistanceMOhm ?? 0} m\u03a9</span></div>
+      <div class="metric"><span class="k">Modus</span><span class="v">${esc(s.mode)}</span></div>
+      <div class="metric"><span class="k">Chemie</span><span class="v">${esc(s.chemistry)}</span></div>
+    </div>
+    ${err}
     ${sparkline(points)}`;
   return el;
 }

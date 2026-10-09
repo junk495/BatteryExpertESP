@@ -24,7 +24,7 @@ public:
     using NotifyCallback = std::function<void(const std::vector<uint8_t>&)>;
 
     void begin(const std::string& deviceName = "mc5000-bridge");
-    std::vector<BleDeviceInfo> scanDevices(uint32_t scanSeconds = 5);
+    std::vector<BleDeviceInfo> scanDevices(uint32_t scanMillis = 5000);
     bool connect(const std::string& address);   // per MAC-Adresse verbinden
     void disconnect();
     bool isConnected() const;

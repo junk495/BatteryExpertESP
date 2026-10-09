@@ -137,7 +137,7 @@ static String buildInfoJson() {
 }
 
 static String buildScanJson() {
-    auto devices = g_ble.scanDevices(3);
+    auto devices = g_ble.scanDevices(5000);
     DynamicJsonDocument doc(4096);
     JsonArray arr = doc.createNestedArray("devices");
     for (const auto& d : devices) {
