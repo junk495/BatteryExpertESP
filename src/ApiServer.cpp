@@ -269,8 +269,8 @@ void ApiServer::begin() {
     _server.on("/api/v1/cell_types", HTTP_POST, [this]() {
         handleMutation(EntityType::TYPE, OpType::UPSERT, nullptr);
     });
-    _server.on("/api/v1/history", HTTP_POST, [this]() {
-        handleMutation(EntityType::HISTORY, OpType::UPSERT, nullptr);
+    _server.on("/api/v1/test_results", HTTP_POST, [this]() {
+        handleMutation(EntityType::TEST_RESULT, OpType::UPSERT, nullptr);
     });
 
     _server.onNotFound([this]() {

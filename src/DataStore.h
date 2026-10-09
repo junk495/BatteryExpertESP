@@ -6,7 +6,7 @@
 //   - DownsamplingBuffer[4]     (Live-Messreihen, transient)
 //   - BasicJsonDocument<SpiRamAllocator> (persistentes Dokument, PSRAM)
 //   - LittleFS-Checkpoint       (write-behind, atomar via Temp-Datei + Rename)
-//   - SNTP-Zeit                 (absolute Zeitstempel für history)
+//   - SNTP-Zeit                 (absolute Zeitstempel für test_results)
 //
 // Concurrency (siehe docs/DATENHALTUNG.md §5): Persistente Mutationen laufen
 // ausschließlich im HTTP-Loop-Task (Single-Thread). Der einzige Cross-Task-
@@ -18,11 +18,13 @@
 // inkludiert <Arduino.h>, <LittleFS.h> und <time.h> vor diesem Header.
 
 #include <ArduinoJson.h>
+#include <LittleFS.h>
 #include <string>
 #include <vector>
 
 #include "BoundedChangeLog.h"
 #include "DownsamplingBuffer.h"
+#include "Mc5000Protocol.h"
 
 // PSRAM-Allocator für ArduinoJson-Dokumente. Im nativen Unit-Test (kein PSRAM)
 // fällt er auf den Standard-Heap zurück, damit die Serialisierungslogik host-
@@ -58,7 +60,7 @@ public:
     // Startet SNTP und blockiert bis zu timeoutMs auf gültige Wall-Clock-Zeit.
     bool syncTime(uint32_t timeoutMs = 15000);
     bool timeReady() const;
-    uint32_t nowSeconds() const;    // absolute Epoche (0 wenn nicht bereit) — für history
+    uint32_t nowSeconds() const;    // absolute Epoche (0 wenn nicht bereit) — für test_results
     uint32_t uptimeSeconds() const; // millis()/1000 — für die Ringpuffer-Ausdünnung
 
     // ---- Live-Daten (transient, nicht persistiert) ----
@@ -86,8 +88,13 @@ public:
     // Mode zu. Vom ApiServer aufgerufen, wenn die PWA einen Ladevorgang startet.
     bool assignSlot(int slot, const char* cell_id, const char* mode);
 
+    // Füllt die Lade-/Entlade-Konfiguration aus dem Zelltyp der Zelle. Gibt false
+    // zurück, wenn Zelle/Typ nicht gefunden wurden (Aufrufer behält seine Defaults).
+    bool getChargeDefaults(const char* cell_id, mc5000::ChargeProfile& out,
+                           int& capacityCutoffMah) const;
+
     // Schließt einen Slot ab (Flankenerkennung "Completed" im Loop-Task):
-    // hängt den Ergebnis-Datensatz an history an (falls eine Zelle zugeordnet
+    // hängt den Ergebnis-Datensatz an test_results an (falls eine Zelle zugeordnet
     // ist) und gibt den Slot wieder frei. Die Energie wird aus dem im
     // pushLivePoint() aufsummierten Leistungs-Integral berechnet. `action`
     // stammt bevorzugt aus dem beim Start gesetzten Mode (pending_mode);
@@ -101,6 +108,7 @@ private:
     BoundedChangeLog _changeLog;                  // ~6,8 KB statisch (SRAM ausreichend)
     DownsamplingBuffer _buffers[MAX_SLOTS];       // PSRAM-Buffer via allocate()
     BasicJsonDocument<SpiRamAllocator>* _doc = nullptr;  // persistentes Dokument (PSRAM)
+    fs::LittleFSFS _dataFs;                       // separate Daten-Partition ("storage")
     std::string active_cell_ids[MAX_SLOTS];       // transient: Zelle je Slot (leer = frei)
     std::string pending_mode[MAX_SLOTS];          // transient: gestarteter Mode je Slot (für action)
     int64_t energy_accumulator[MAX_SLOTS] = {0};  // transient: Σ(V_mV × I_mA) je Sekunde (µJ)

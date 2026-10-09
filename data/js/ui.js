@@ -1,4 +1,4 @@
-// ui.js — PWA entry point: live dashboard, cell register and history views.
+// ui.js — PWA entry point: live dashboard, cell register and test-result views.
 //
 // Consumes `Store` (state.js) for all synced data and drives the views via the
 // REST endpoints. No framework, no build step — plain ES modules.
@@ -260,12 +260,12 @@ function renderCells() {
   }
 }
 
-// --- history -----------------------------------------------------------------
+// --- test results ------------------------------------------------------------
 
-function renderHistory() {
-  const body = document.getElementById('history-body');
+function renderTestResults() {
+  const body = document.getElementById('results-body');
   body.innerHTML = '';
-  for (const h of Store.history.slice().reverse()) {
+  for (const h of Store.testResults.slice().reverse()) {
     const cell = Store.cells.get(h.cell_id);
     const label = cell ? (cell.label || `#${cell.number}`) : h.cell_id;
     const tr = document.createElement('tr');
@@ -273,9 +273,11 @@ function renderHistory() {
       <td>${formatTime(h.timestamp_s)}</td>
       <td>${esc(label)}</td>
       <td>${esc(h.action)}</td>
-      <td>${h.capacity_mah ?? 0} mAh</td>
+      <td>${h.measured_capacity_mah ?? 0} mAh</td>
       <td class="hide-sm">${h.energy_mwh ?? 0} mWh</td>
-      <td class="hide-sm">${h.ir_mohm ?? 0} m\u03a9</td>`;
+      <td class="hide-sm">${h.measured_ir_mohm ?? 0} m\u03a9</td>
+      <td>${h.soh_nominal_percent != null ? h.soh_nominal_percent + '%' : '\u2014'}</td>
+      <td><span class="rec ${esc(h.recommendation)}">${esc(h.recommendation)}</span></td>`;
     body.appendChild(tr);
   }
 }
@@ -384,6 +386,15 @@ function openEntityModal(entity, existing = null) {
     form.appendChild(formSelect('chemistry', 'Chemie', CHEMISTRIES.map((c) => [c, c])));
     form.appendChild(formField('nominal_capacity_mah', 'Nennkapazit\u00e4t (mAh)', existing?.nominal_capacity_mah ?? 3000, 'number'));
     form.appendChild(formField('nominal_voltage_mv', 'Nennspannung (mV)', existing?.nominal_voltage_mv ?? 3700, 'number'));
+    form.appendChild(formField('typical_ir_mohm', 'Typischer IR (m\u03a9)', existing?.typical_ir_mohm ?? '', 'number'));
+    form.appendChild(formField('charge_current_ma', 'Ladestrom (mA)', existing?.charge_current_ma ?? 1000, 'number'));
+    form.appendChild(formField('discharge_current_ma', 'Entladestrom (mA)', existing?.discharge_current_ma ?? 1000, 'number'));
+    form.appendChild(formField('target_voltage_mv', 'Zielspannung (mV)', existing?.target_voltage_mv ?? 4200, 'number'));
+    form.appendChild(formField('cutoff_voltage_mv', 'Cutoff-Spannung (mV)', existing?.cutoff_voltage_mv ?? 3200, 'number'));
+    form.appendChild(formField('termination_current_ma', 'Abschaltstrom (mA)', existing?.termination_current_ma ?? 100, 'number'));
+    form.appendChild(formField('delta_peak_mv', '\u0394-Peak (mV)', existing?.delta_peak_mv ?? 0, 'number'));
+    form.appendChild(formField('trickle_charge_ma', 'Erhaltungsladung (mA)', existing?.trickle_charge_ma ?? 0, 'number'));
+    form.appendChild(formField('capacity_cutoff_mah', 'Kapazit\u00e4ts-Cutoff (mAh)', existing?.capacity_cutoff_mah ?? 3000, 'number'));
     form.querySelector('[name="chemistry"]').value = existing?.chemistry || 'Li-Ion';
   } else {
     title.textContent = existing ? 'Zelle bearbeiten' : 'Zelle anlegen';
@@ -392,6 +403,9 @@ function openEntityModal(entity, existing = null) {
     form.appendChild(formSelect('cell_type_id', 'Zelltyp', types));
     form.appendChild(formField('number', 'Nummer', existing?.number ?? '', 'number'));
     form.appendChild(formField('label', 'Label', existing?.label || ''));
+    form.appendChild(formField('purchase_capacity_mah', 'Kaufkapazit\u00e4t (mAh)', existing?.purchase_capacity_mah ?? '', 'number'));
+    form.appendChild(formField('purchase_ir_mohm', 'Kauf-IR (m\u03a9)', existing?.purchase_ir_mohm ?? '', 'number'));
+    form.appendChild(formField('notes', 'Notizen', existing?.notes || ''));
     form.appendChild(formSelect('status', 'Status', [['active', 'Aktiv'], ['retired', 'Ausgemustert']]));
     if (existing) {
       form.querySelector('[name="cell_type_id"]').value = existing.cell_type_id || '';
@@ -413,7 +427,7 @@ async function saveEntity() {
   const entityId = currentEntityId;
   const form = document.getElementById('entity-form');
   const data = Object.fromEntries(new FormData(form).entries());
-  for (const k of ['nominal_capacity_mah', 'nominal_voltage_mv', 'number']) {
+  for (const k of ['nominal_capacity_mah', 'nominal_voltage_mv', 'typical_ir_mohm', 'charge_current_ma', 'discharge_current_ma', 'target_voltage_mv', 'cutoff_voltage_mv', 'termination_current_ma', 'delta_peak_mv', 'trickle_charge_ma', 'capacity_cutoff_mah', 'number', 'purchase_capacity_mah', 'purchase_ir_mohm']) {
     if (data[k] !== undefined) data[k] = parseInt(data[k], 10) || 0;
   }
 
@@ -547,7 +561,7 @@ function switchView(name) {
   for (const btn of document.querySelectorAll('.bottom-nav button')) {
     btn.classList.toggle('active', btn.dataset.view === name);
   }
-  if (name === 'data') { renderRegister(); renderHistory(); }
+  if (name === 'data') { renderRegister(); renderTestResults(); }
   if (name === 'settings') renderSettings();
 }
 
@@ -561,8 +575,8 @@ function init() {
   renderDashboard();
   setInterval(renderDashboard, 2000);
 
-  // delta sync -> re-render register + history
-  startSync(2000, () => { renderRegister(); renderHistory(); });
+  // delta sync -> re-render register + test results
+  startSync(2000, () => { renderRegister(); renderTestResults(); });
 
   // slot modal
   document.getElementById('slot-modal-cancel').addEventListener('click', closeSlotModal);

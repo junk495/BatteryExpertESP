@@ -265,6 +265,10 @@ button:active { transform: translateY(1px); }
 .badge { padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
 .badge.active  { background: var(--ok-soft);     color: var(--ok); }
 .badge.retired { background: var(--danger-soft); color: var(--danger); }
+.rec { padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+.rec.OK       { background: var(--ok-soft);     color: var(--ok); }
+.rec.WATCH    { background: var(--warn-soft);   color: var(--warn); }
+.rec.SORT_OUT { background: var(--danger-soft); color: var(--danger); }
 
 /* Formularfelder */
 input, select {

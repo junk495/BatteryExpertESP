@@ -169,24 +169,48 @@ static bool handleCharge(const JsonObject& j) {
     if (slot < 1 || slot > 4) return false;
 
     mc5000::ChargeProfile p;
-    p.mode = (const char*)(j["mode"] | "charge");
-    p.chargeCurrentMa = j["chargeCurrentMa"] | 1000;
-    p.dischargeCurrentMa = j["dischargeCurrentMa"] | 1000;
-    p.targetVoltageMv = j["targetVoltageMv"] | 4200;
-    p.cutoffVoltageMv = j["cutoffVoltageMv"] | 3200;
-    p.terminationCurrentMa = j["terminationCurrentMa"] | 100;
-    p.cycleDirection = j["cycleDirection"] | 0;
-    p.cycleCount = j["cycleCount"] | 1;
-    p.restChargeMin = j["restChargeMin"] | 10;
-    p.restDischargeMin = j["restDischargeMin"] | 10;
-    p.trickleChargeMa = j["trickleChargeMa"] | 0;
-    p.deltaPeakMv = j["deltaPeakMv"] | 0;
-    p.cutoffTimerMin = j["cutoffTimerMin"] | 0;
-    p.maxTimeMin = j["maxTimeMin"] | 0;
+    p.mode = "charge";
+    p.chargeCurrentMa = 1000;
+    p.dischargeCurrentMa = 1000;
+    p.targetVoltageMv = 4200;
+    p.cutoffVoltageMv = 3200;
+    p.terminationCurrentMa = 100;
+    p.cycleDirection = 0;
+    p.cycleCount = 1;
+    p.restChargeMin = 10;
+    p.restDischargeMin = 10;
+    p.trickleChargeMa = 0;
+    p.deltaPeakMv = 0;
+    p.cutoffTimerMin = 0;
+    p.maxTimeMin = 0;
+    int capacityCutoffMah = 3000;
+
+    // Defaults aus dem Zelltyp der Zelle laden (überschreibbar durch JSON).
+    const char* cell_id = j["cell_id"] | "";
+    if (cell_id[0] != '\0') {
+        g_store.getChargeDefaults(cell_id, p, capacityCutoffMah);
+    }
+
+    // Explizite JSON-Felder überschreiben die Defaults.
+    if (!j["mode"].isNull())                 p.mode = j["mode"] | "charge";
+    if (!j["chargeCurrentMa"].isNull())      p.chargeCurrentMa = j["chargeCurrentMa"];
+    if (!j["dischargeCurrentMa"].isNull())   p.dischargeCurrentMa = j["dischargeCurrentMa"];
+    if (!j["targetVoltageMv"].isNull())      p.targetVoltageMv = j["targetVoltageMv"];
+    if (!j["cutoffVoltageMv"].isNull())      p.cutoffVoltageMv = j["cutoffVoltageMv"];
+    if (!j["terminationCurrentMa"].isNull()) p.terminationCurrentMa = j["terminationCurrentMa"];
+    if (!j["cycleDirection"].isNull())       p.cycleDirection = j["cycleDirection"];
+    if (!j["cycleCount"].isNull())           p.cycleCount = j["cycleCount"];
+    if (!j["restChargeMin"].isNull())        p.restChargeMin = j["restChargeMin"];
+    if (!j["restDischargeMin"].isNull())     p.restDischargeMin = j["restDischargeMin"];
+    if (!j["trickleChargeMa"].isNull())      p.trickleChargeMa = j["trickleChargeMa"];
+    if (!j["deltaPeakMv"].isNull())          p.deltaPeakMv = j["deltaPeakMv"];
+    if (!j["cutoffTimerMin"].isNull())       p.cutoffTimerMin = j["cutoffTimerMin"];
+    if (!j["maxTimeMin"].isNull())           p.maxTimeMin = j["maxTimeMin"];
+    if (!j["capacityCutoffMah"].isNull())    capacityCutoffMah = j["capacityCutoffMah"];
 
     const int mask = (slot == 1) ? 1 : (slot == 2) ? 2 : (slot == 3) ? 4 : 8;
 
-    if (!g_ble.writePacket(g_protocol.buildChargeConfig(p, chemistry, mask))) {
+    if (!g_ble.writePacket(g_protocol.buildChargeConfig(p, chemistry, mask, capacityCutoffMah))) {
         return false;
     }
     return g_ble.writePacket(g_protocol.buildStartStop(mask));   // Slot starten

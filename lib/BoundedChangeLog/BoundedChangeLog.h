@@ -7,14 +7,14 @@
 #include <cstring>
 #include <vector>
 
-enum class EntityType : uint8_t { CELL, TYPE, HISTORY };
+enum class EntityType : uint8_t { CELL, TYPE, TEST_RESULT };
 enum class OpType : uint8_t { UPSERT, DEL };   // DEL (not DELETE, which collides with macros)
 
 struct ChangeEntry {
     uint32_t seq_id;
     EntityType entity;
     OpType op;
-    char payload[200];   // reicht auch für history-Schnipsel (~134 Zeichen)
+    char payload[320];   // also fits enriched test_result snippets (~230 chars)
 };
 
 class BoundedChangeLog {
