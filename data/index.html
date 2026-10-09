@@ -15,24 +15,6 @@
 
   <header>
     <h1>BatteryExpert</h1>
-    <nav>
-      <button data-view="dashboard" class="active">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-        Dashboard
-      </button>
-      <button data-view="register">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/></svg>
-        Zell-Register
-      </button>
-      <button data-view="history">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-        Historie
-      </button>
-      <button data-view="settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
-        Einstellungen
-      </button>
-    </nav>
   </header>
 
   <main>
@@ -42,8 +24,8 @@
       <p id="ble-state" class="muted"></p>
     </section>
 
-    <!-- Zell-Register -->
-    <section id="view-register" class="view" hidden>
+    <!-- Daten -->
+    <section id="view-data" class="view" hidden>
       <section class="card">
         <div class="card-head">
           <h2>Zelltypen</h2>
@@ -71,10 +53,7 @@
           <tbody id="cells-body"></tbody>
         </table>
       </section>
-    </section>
 
-    <!-- Historie -->
-    <section id="view-history" class="view" hidden>
       <section class="card">
         <h2>Historie</h2>
         <table>
@@ -84,6 +63,14 @@
           </tr></thead>
           <tbody id="history-body"></tbody>
         </table>
+      </section>
+    </section>
+
+    <!-- Test -->
+    <section id="view-test" class="view" hidden>
+      <section class="card">
+        <h2>Test</h2>
+        <p class="muted">Noch nicht verfügbar.</p>
       </section>
     </section>
 
@@ -112,6 +99,25 @@
       </section>
     </section>
   </main>
+
+  <nav class="bottom-nav">
+    <button data-view="dashboard" class="active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      <span>Dashboard</span>
+    </button>
+    <button data-view="data">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/></svg>
+      <span>Daten</span>
+    </button>
+    <button data-view="test">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <span>Test</span>
+    </button>
+    <button data-view="settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+      <span>Einstellungen</span>
+    </button>
+  </nav>
 
   <!-- Modal: Slot belegen -->
   <div id="slot-modal" class="modal" hidden>

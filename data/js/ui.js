@@ -124,7 +124,8 @@ function fmtElapsed(sec) {
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
-  return `${h}h ${m}m ${s}s`;
+  const pad = (n) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
 // --- register ----------------------------------------------------------------
@@ -455,18 +456,17 @@ function switchView(name) {
   for (const view of document.querySelectorAll('.view')) {
     view.hidden = view.id !== `view-${name}`;
   }
-  for (const btn of document.querySelectorAll('nav button')) {
+  for (const btn of document.querySelectorAll('.bottom-nav button')) {
     btn.classList.toggle('active', btn.dataset.view === name);
   }
-  if (name === 'register') renderRegister();
-  if (name === 'history') renderHistory();
+  if (name === 'data') { renderRegister(); renderHistory(); }
   if (name === 'settings') renderSettings();
 }
 
 // --- init --------------------------------------------------------------------
 
 function init() {
-  document.querySelectorAll('nav button').forEach((b) =>
+  document.querySelectorAll('.bottom-nav button').forEach((b) =>
     b.addEventListener('click', () => switchView(b.dataset.view)));
 
   // dashboard polling (live data is transient, not in the delta log)
