@@ -113,9 +113,11 @@ function renderChart(points) {
   const cMax = Math.max(...rows.map((r) => r.c));
   let yMin = Math.min(vMin, cMin);
   let yMax = Math.max(vMax, cMax);
-  if (yMax - yMin < 0.5) { const mid = (yMax + yMin) / 2; yMin = mid - 0.25; yMax = mid + 0.25; }
+  const ySpan = yMax - yMin;
+  if (ySpan < 1e-9) { const mid = (yMax + yMin) / 2; yMin = mid - 0.25; yMax = mid + 0.25; }
+  else { const pad = ySpan * 0.1; yMin -= pad; yMax += pad; }
 
-  const yTicks = niceTicks(yMin, yMax, 4);
+  const yTicks = niceTicks(yMin, yMax, 5);
 
   const xMax = Math.max(rows[rows.length - 1].t, 1);
   const xStep = niceMinuteStep(xMax);

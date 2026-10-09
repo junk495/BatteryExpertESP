@@ -134,8 +134,14 @@ void DataStore::pushLivePoint(int slot, uint16_t voltage_mv, int16_t current_ma,
 }
 
 bool DataStore::buildLiveJson(String& out) const {
-    // TODO: a full series can exceed a single JsonDocument; streaming may be needed.
-    DynamicJsonDocument doc(16384);
+    // The full ring buffer (2000 pts/slot) would exceed any fixed-size document,
+    // so only the most recent window is sent. The PWA chart is ~320 px wide, so
+    // 512 samples per slot are more than enough resolution. The document lives in
+    // PSRAM because 4 x 512 points no longer fit the 16 KiB heap budget.
+    static constexpr size_t MAX_POINTS_PER_SLOT = 512;
+    static constexpr size_t LIVE_CAPACITY = 262144;   // 256 KiB (PSRAM)
+
+    BasicJsonDocument<SpiRamAllocator> doc(LIVE_CAPACITY);
     JsonArray slots = doc.createNestedArray("slots");
     for (int s = 0; s < MAX_SLOTS; ++s) {
         JsonObject slot = slots.createNestedObject();
@@ -143,7 +149,8 @@ bool DataStore::buildLiveJson(String& out) const {
         JsonArray points = slot.createNestedArray("points");
         const LivePoint* data = _buffers[s].getData();
         const size_t n = _buffers[s].getCount();
-        for (size_t i = 0; i < n; ++i) {
+        const size_t start = (n > MAX_POINTS_PER_SLOT) ? (n - MAX_POINTS_PER_SLOT) : 0;
+        for (size_t i = start; i < n; ++i) {
             JsonArray p = points.createNestedArray();
             p.add(data[i].timestamp_s);
             p.add(data[i].voltage_mv);
