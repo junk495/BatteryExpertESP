@@ -288,3 +288,8 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
   font-size: 0.9rem;
 }
 .update-banner[hidden] { display: none; }
+
+/* Responsiv: sekundäre Spalten auf schmalen Displays ausblenden */
+@media (max-width: 640px) {
+  .hide-sm { display: none; }
+}

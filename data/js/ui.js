@@ -144,8 +144,8 @@ function renderTypes() {
       <td>${esc(t.manufacturer)}</td>
       <td>${esc(t.model)}</td>
       <td>${esc(t.chemistry)}</td>
-      <td>${t.nominal_capacity_mah ?? 0} mAh</td>
-      <td>${(t.nominal_voltage_mv ?? 0) / 1000} V</td>
+      <td class="hide-sm">${t.nominal_capacity_mah ?? 0} mAh</td>
+      <td class="hide-sm">${(t.nominal_voltage_mv ?? 0) / 1000} V</td>
       <td class="actions">
         <button data-action="edit" data-id="${esc(t.id)}">\u270e</button>
         <button data-action="delete" data-id="${esc(t.id)}" class="danger">\u2715</button>
@@ -162,7 +162,7 @@ function renderCells() {
     tr.innerHTML = `
       <td>${c.number ?? ''}</td>
       <td>${esc(c.label)}</td>
-      <td>${esc(typeLabel(Store.types.get(c.cell_type_id)))}</td>
+      <td class="hide-sm">${esc(typeLabel(Store.types.get(c.cell_type_id)))}</td>
       <td><span class="badge ${esc(c.status)}">${esc(c.status)}</span></td>
       <td class="actions">
         <button data-action="edit" data-id="${esc(c.id)}">\u270e</button>
@@ -186,8 +186,8 @@ function renderHistory() {
       <td>${esc(label)}</td>
       <td>${esc(h.action)}</td>
       <td>${h.capacity_mah ?? 0} mAh</td>
-      <td>${h.energy_mwh ?? 0} mWh</td>
-      <td>${h.ir_mohm ?? 0} m\u03a9</td>`;
+      <td class="hide-sm">${h.energy_mwh ?? 0} mWh</td>
+      <td class="hide-sm">${h.ir_mohm ?? 0} m\u03a9</td>`;
     body.appendChild(tr);
   }
 }
