@@ -212,8 +212,8 @@ static bool connectWifi() {
         return false;
     }
     Serial.printf("[wifi] verbinde mit %s ...\n", g_wifiSsid.c_str());
-    WiFi.disconnect();
     WiFi.mode(WIFI_STA);
+    WiFi.disconnect();
     WiFi.setHostname(HOSTNAME);
     WiFi.begin(g_wifiSsid.c_str(), g_wifiPass.c_str());
 

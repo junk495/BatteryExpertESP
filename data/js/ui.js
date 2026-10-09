@@ -72,8 +72,8 @@ function sparkline(points) {
   const coords = vs
     .map((v, i) => `${(i / (vs.length - 1) * w).toFixed(1)},${(h - ((v - min) / range) * h).toFixed(1)}`)
     .join(' ');
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">` +
-    `<polyline points="${coords}" fill="none" stroke="#1a73e8" stroke-width="1.5"/></svg>`;
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">` +
+    `<polyline points="${coords}" fill="none" stroke-width="1.5"/></svg>`;
 }
 
 // --- dashboard ---------------------------------------------------------------
@@ -104,7 +104,7 @@ function renderSlot(num, s, points) {
     return el;
   }
 
-  el.className = 'slot';
+  el.className = 'slot ' + esc(s.status);
   el.innerHTML = `
     <h3>Slot ${num}</h3>
     <div class="status ${esc(s.status)}">${esc(s.status)}</div>
