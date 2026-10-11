@@ -41,7 +41,7 @@ data/                 PWA-Webclient (wird ins LittleFS geflasht)
 lib/                  reine, hardwareunabhängige Bibliotheken (nativ testbar)
 src/main.cpp          Wiring: WiFi + BLE + HTTP + Polling
 src/Mc5000BleClient   BLE-Central (Scan/Connect/Notify/Write)
-src/DataStore         persistente Datenhaltung (LittleFS-Checkpoint, Delta-Sync)
+src/DataStore         persistente Datenhaltung (NVS-Checkpoint, Delta-Sync)
 src/ApiServer         REST-Endpoints + PWA-Serving
 include/config.h      Defaults (ohne Zugangsdaten)
 test/                 native Unit-Tests (Unity, 3 Suiten)

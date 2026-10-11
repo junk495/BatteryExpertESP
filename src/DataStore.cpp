@@ -9,9 +9,10 @@
 // Constants
 // ---------------------------------------------------------------------------
 
-// LittleFS paths. Checkpoints are written to a temp file and atomically renamed.
-static const char* DOC_PATH = "/mc5000.json";
-static const char* DOC_TMP_PATH = "/mc5000.tmp";
+// NVS keys for the persisted checkpoint (JSON blob). NVS survives uploadfs and
+// firmware re-flashes, unlike a dedicated LittleFS partition.
+static const char* NVS_NAMESPACE = "datastore";
+static const char* DOC_KEY = "doc";
 
 // NTP server. Time is kept strictly UTC (offset 0); the PWA formats locally.
 static const char* NTP_SERVER = "pool.ntp.org";
@@ -56,13 +57,16 @@ DataStore::~DataStore() {
 // ---------------------------------------------------------------------------
 
 bool DataStore::begin() {
-    // PWA assets live in the default "spiffs" partition (flashed via uploadfs);
-    // the persistent checkpoint lives in a dedicated "storage" partition so that
-    // re-flashing the filesystem does not erase cell/test-result data.
-    LittleFS.begin(true);                                   // "spiffs" -> PWA
-    if (!_dataFs.begin(true, "/storage", 10, "storage")) {  // "storage" -> data
+    // PWA assets live in the default "spiffs" partition (flashed via uploadfs).
+    LittleFS.begin(true);
+
+    // The persistent checkpoint lives in NVS, which uploadfs/firmware re-flashes
+    // never erase (unlike a dedicated LittleFS partition).
+    if (!_prefs.begin(NVS_NAMESPACE, false)) {
+        Serial.println("[store] NVS begin failed");
         return false;
     }
+    Serial.println("[store] NVS opened");
     _fsReady = true;
 
     _doc = new BasicJsonDocument<SpiRamAllocator>(DOC_CAPACITY);
@@ -72,6 +76,14 @@ bool DataStore::begin() {
 
     if (!loadDocument()) {
         seedDocument();
+    }
+
+    // Debug: log the document shape after init to diagnose full-sync issues.
+    {
+        const size_t dbgLen = measureJson(*_doc);
+        std::vector<char> dbg(dbgLen + 1);
+        serializeJson(*_doc, dbg.data(), dbgLen + 1);
+        Serial.printf("[store] doc after init: %s\n", dbg.data());
     }
 
     for (int i = 0; i < MAX_SLOTS; ++i) {
@@ -184,7 +196,7 @@ bool DataStore::applyMutation(EntityType entity, OpType op, const char* id,
             return false;
         }
         const char* key = (entity == EntityType::CELL) ? KEY_CELLS : KEY_CELL_TYPES;
-        JsonArray arr = (*_doc)[key].as<JsonArray>();
+        JsonArray arr = (*_doc)[key].to<JsonArray>();   // creates the array if missing
         const int idx = findById(arr, id);
         if (idx < 0) {
             return false;   // nothing to delete
@@ -217,7 +229,7 @@ bool DataStore::applyMutation(EntityType entity, OpType op, const char* id,
 
         const char* key = (entity == EntityType::CELL) ? KEY_CELLS : KEY_CELL_TYPES;
         const char* wrapper = (entity == EntityType::CELL) ? "cell" : "type";
-        JsonArray arr = (*_doc)[key].as<JsonArray>();
+        JsonArray arr = (*_doc)[key].to<JsonArray>();   // creates the array if missing
         const int idx = findById(arr, eid);
         if (idx >= 0) {
             arr[idx] = obj;   // replace
@@ -300,16 +312,15 @@ bool DataStore::buildDeltaJson(uint32_t since_seq, String& out) {
 }
 
 void DataStore::buildFullSyncJson(String& out) {
-    // Deep-copies the document into the response (rare path; memory-heavy).
-    // TODO: for large documents, serialize the PSRAM document directly.
-    DynamicJsonDocument resp(DOC_CAPACITY);
-    resp["current_seq"] = currentSeq();
-    resp["full"] = true;
-    resp[KEY_CELL_TYPES] = (*_doc)[KEY_CELL_TYPES];
-    resp[KEY_CELLS] = (*_doc)[KEY_CELLS];
-    resp[KEY_TEST_RESULTS] = (*_doc)[KEY_TEST_RESULTS];
-    out = "";
-    serializeJson(resp, out);
+    // Serialize the PSRAM document directly and splice in the sync envelope.
+    // Avoids a deep copy into a temporary heap document, which can silently
+    // truncate large documents.
+    String body;
+    serializeJson(*_doc, body);   // {"cell_types":[...],"cells":[...],"test_results":[...]}
+    out = "{\"current_seq\":";
+    out += String(currentSeq());
+    out += ",\"full\":true,";
+    out += body.substring(1);     // strip the leading '{'
 }
 
 // ---------------------------------------------------------------------------
@@ -317,44 +328,57 @@ void DataStore::buildFullSyncJson(String& out) {
 // ---------------------------------------------------------------------------
 
 bool DataStore::loadDocument() {
-    if (!_dataFs.exists(DOC_PATH)) {
+    if (!_prefs.isKey(DOC_KEY)) {
+        Serial.println("[store] no checkpoint -> seed");
         return false;
     }
-    File f = _dataFs.open(DOC_PATH, "r");
-    if (!f) {
+    const size_t len = _prefs.getBytesLength(DOC_KEY);
+    if (len == 0) {
+        Serial.println("[store] empty checkpoint -> seed");
         return false;
     }
-    const DeserializationError err = deserializeJson(*_doc, f);
-    f.close();
-    return !err && _doc->is<JsonObject>();
+    std::vector<char> buf(len);
+    if (_prefs.getBytes(DOC_KEY, buf.data(), len) != len) {
+        Serial.println("[store] NVS read failed");
+        return false;
+    }
+    const DeserializationError err = deserializeJson(*_doc, buf.data(), len);
+    if (err || !_doc->is<JsonObject>()) {
+        Serial.printf("[store] checkpoint parse failed: %s\n", err.c_str());
+        return false;
+    }
+    Serial.printf("[store] checkpoint loaded (%u bytes)\n", (unsigned)len);
+    return true;
 }
 
 void DataStore::seedDocument() {
-    _doc->clear();
-    _doc->createNestedArray(KEY_CELL_TYPES);
-    _doc->createNestedArray(KEY_CELLS);
-    _doc->createNestedArray(KEY_TEST_RESULTS);
+    JsonObject root = _doc->to<JsonObject>();   // clears and makes the root an object
+    root.createNestedArray(KEY_CELL_TYPES);
+    root.createNestedArray(KEY_CELLS);
+    root.createNestedArray(KEY_TEST_RESULTS);
 }
 
 bool DataStore::writeDocumentRaw() {
     if (!_fsReady || !_doc) {
         return false;
     }
-    File f = _dataFs.open(DOC_TMP_PATH, "w");
-    if (!f) {
+    // Serialize to a heap buffer sized via measureJson(); avoids any reliance on
+    // the ArduinoJson String overload and guarantees no truncation.
+    const size_t cap = measureJson(*_doc);
+    if (cap == 0) {
         return false;
     }
-    const size_t n = serializeJson(*_doc, f);
-    f.close();
+    std::vector<char> buf(cap + 1);
+    const size_t n = serializeJson(*_doc, buf.data(), cap + 1);
     if (n == 0) {
-        _dataFs.remove(DOC_TMP_PATH);
         return false;
     }
-    _dataFs.remove(DOC_PATH);
-    if (!_dataFs.rename(DOC_TMP_PATH, DOC_PATH)) {
-        _dataFs.remove(DOC_TMP_PATH);
+    const size_t written = _prefs.putBytes(DOC_KEY, buf.data(), n);
+    if (written != n) {
+        Serial.printf("[store] NVS write failed (%u/%u)\n", (unsigned)written, (unsigned)n);
         return false;
     }
+    Serial.printf("[store] checkpoint ok (%u bytes)\n", (unsigned)n);
     return true;
 }
 

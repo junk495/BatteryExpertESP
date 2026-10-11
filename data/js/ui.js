@@ -213,17 +213,16 @@ function renderSlot(num, s, points) {
   el.innerHTML = `
     <div class="slot-head">
       <h3>Slot ${num}</h3>
+      <span class="slot-chem">${esc(s.chemistry)}</span>
       <span class="status-pill ${esc(s.status)}"><i class="dot"></i>${esc(s.status)}</span>
     </div>
     <div class="metrics">
       <div class="metric"><span class="k">Spannung</span><span class="v">${(s.voltageV || 0).toFixed(3)} V</span></div>
       <div class="metric"><span class="k">Strom</span><span class="v">${(s.currentA || 0).toFixed(3)} A</span></div>
-      <div class="metric"><span class="k">Temp.</span><span class="v">${(s.temperatureC || 0).toFixed(1)} \u00b0C</span></div>
       <div class="metric"><span class="k">Kapazit\u00e4t</span><span class="v">${s.capacityMah ?? 0} mAh</span></div>
       <div class="metric"><span class="k">Zeit</span><span class="v">${fmtElapsed(s.elapsedSeconds)}</span></div>
       <div class="metric"><span class="k">Innenwiderstand</span><span class="v">${s.internalResistanceMOhm ?? 0} m\u03a9</span></div>
       <div class="metric"><span class="k">Modus</span><span class="v">${esc(s.mode)}</span></div>
-      <div class="metric"><span class="k">Chemie</span><span class="v">${esc(s.chemistry)}</span></div>
     </div>
     ${err}
     ${renderChart(points)}`;

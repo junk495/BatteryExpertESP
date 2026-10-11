@@ -34,7 +34,7 @@ ansteuert. Diese Bridge macht das Ladegerät über **HTTP/JSON im WLAN** erreich
 | BLE       | NimBLE-Arduino (^2.x)                | leichtgewichtiger BLE-Central, kompatibel mit Core 3.x  |
 | HTTP      | `WebServer.h` (im Arduino-Core)      | synchron, einfach, im Core enthalten                    |
 | JSON      | ArduinoJson (^6.x)                   | Standard                                                |
-| Filesystem| LittleFS (im Arduino-Core)           | PWA-Assets + JSON-Checkpoint                            |
+| Filesystem| LittleFS + NVS (im Arduino-Core)     | PWA aus LittleFS, Checkpoint im NVS (uploadfs-sicher)    |
 | Tests     | Unity (native)                       | reine Protokollschicht ohne Hardware testbar            |
 
 > **Hinweis Core-Version:** vorausgesetzt wird `espressif32` ≥ 6.x → **Arduino-Core 3.x**
@@ -63,7 +63,7 @@ BatteryExpertESP/
 ├── src/
 │   ├── main.cpp                      # Wiring: WiFi + BLE + HTTP + Polling
 │   ├── Mc5000BleClient.h/.cpp        # BLE-Central (Scan/Connect/Notify/Write)
-│   ├── DataStore.h/.cpp              # persistente Datenhaltung (LittleFS-Checkpoint, Delta-Sync)
+│   ├── DataStore.h/.cpp              # persistente Datenhaltung (NVS-Checkpoint, Delta-Sync)
 │   └── ApiServer.h/.cpp              # REST-Endpoints + PWA-Serving
 ├── test/                             # native Unity-Tests (3 Suiten)
 │   ├── test_protocol/                # Codec

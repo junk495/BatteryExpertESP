@@ -5,7 +5,7 @@
 //   - BoundedChangeLog          (Delta-Engine, sequenzbasiert)
 //   - DownsamplingBuffer[4]     (Live-Messreihen, transient)
 //   - BasicJsonDocument<SpiRamAllocator> (persistentes Dokument, PSRAM)
-//   - LittleFS-Checkpoint       (write-behind, atomar via Temp-Datei + Rename)
+//   - NVS-Checkpoint            (write-behind, atomar via Preferences)
 //   - SNTP-Zeit                 (absolute Zeitstempel für test_results)
 //
 // Concurrency (siehe docs/DATENHALTUNG.md §5): Persistente Mutationen laufen
@@ -14,11 +14,11 @@
 // aufgerufen wird. buildDeltaJson()/buildLiveJson() erstellen die Antworten unter
 // einem schnellen Snapshot, nicht unter dauerhaft gehaltenem Mutex.
 //
-// Hinweis: Diese Klasse ist Arduino-abhängig (String, LittleFS, SNTP). Die .cpp
-// inkludiert <Arduino.h>, <LittleFS.h> und <time.h> vor diesem Header.
+// Hinweis: Diese Klasse ist Arduino-abhängig (String, Preferences/NVS, SNTP).
+// Die .cpp inkludiert <Arduino.h>, <LittleFS.h> (PWA-Mount) und <time.h>.
 
 #include <ArduinoJson.h>
-#include <LittleFS.h>
+#include <Preferences.h>
 #include <string>
 #include <vector>
 
@@ -108,7 +108,7 @@ private:
     BoundedChangeLog _changeLog;                  // ~6,8 KB statisch (SRAM ausreichend)
     DownsamplingBuffer _buffers[MAX_SLOTS];       // PSRAM-Buffer via allocate()
     BasicJsonDocument<SpiRamAllocator>* _doc = nullptr;  // persistentes Dokument (PSRAM)
-    fs::LittleFSFS _dataFs;                       // separate Daten-Partition ("storage")
+    Preferences _prefs;                           // NVS checkpoint (survives uploadfs)
     std::string active_cell_ids[MAX_SLOTS];       // transient: Zelle je Slot (leer = frei)
     std::string pending_mode[MAX_SLOTS];          // transient: gestarteter Mode je Slot (für action)
     int64_t energy_accumulator[MAX_SLOTS] = {0};  // transient: Σ(V_mV × I_mA) je Sekunde (µJ)
