@@ -33,7 +33,7 @@
 
 * { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; overscroll-behavior-y: none; }
 
 body {
   margin: 0;
@@ -42,6 +42,7 @@ body {
   color: var(--text);
   line-height: 1.5;
   min-height: 100vh;
+  overscroll-behavior-y: none;
 }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -305,6 +306,10 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
   border-radius: var(--radius);
   padding: 1.25rem;
   width: min(420px, 100%);
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 .modal-box h2 { margin: 0 0 1rem; font-size: 1.05rem; font-weight: 600; }

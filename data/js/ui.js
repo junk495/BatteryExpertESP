@@ -24,6 +24,29 @@ const CHEMISTRY_CODES = {
   'eneloop': 5, 'nizn': 6, 'ram': 7, 'lto': 8, 'na-ion': 9,
 };
 
+// Chemistry-dependent charge-program fields. The MC5000 ends NiMH-family cells
+// (NiMH/NiCd/Eneloop/NiZn) via delta-peak + trickle charge, while the other
+// chemistries (Li-*, RAM, LTO, Na-Ion) charge to a target voltage and stop at a
+// termination current. The cell-type form only shows the relevant set.
+const DELTA_PEAK_CHEMISTRIES = new Set(['nimh', 'nicd', 'eneloop', 'nizn']);
+
+const CHEM_FIELDS = {
+  target_voltage_mv:      { label: 'Zielspannung (mV)',     def: 4200 },
+  cutoff_voltage_mv:      { label: 'Cutoff-Spannung (mV)',  def: 3200 },
+  termination_current_ma: { label: 'Abschaltstrom (mA)',    def: 100 },
+  delta_peak_mv:          { label: '\u0394-Peak (mV)',      def: 0 },
+  trickle_charge_ma:      { label: 'Erhaltungsladung (mA)', def: 0 },
+};
+
+const VOLTAGE_FIELDS = ['target_voltage_mv', 'cutoff_voltage_mv', 'termination_current_ma'];
+const DELTA_PEAK_FIELDS = ['delta_peak_mv', 'trickle_charge_ma'];
+
+function chemFieldNames(chemistry) {
+  return DELTA_PEAK_CHEMISTRIES.has(String(chemistry || '').toLowerCase())
+    ? DELTA_PEAK_FIELDS
+    : VOLTAGE_FIELDS;
+}
+
 // --- helpers -----------------------------------------------------------------
 
 function esc(s) {
@@ -389,13 +412,22 @@ function openEntityModal(entity, existing = null) {
     form.appendChild(formField('typical_ir_mohm', 'Typischer IR (m\u03a9)', existing?.typical_ir_mohm ?? '', 'number'));
     form.appendChild(formField('charge_current_ma', 'Ladestrom (mA)', existing?.charge_current_ma ?? 1000, 'number'));
     form.appendChild(formField('discharge_current_ma', 'Entladestrom (mA)', existing?.discharge_current_ma ?? 1000, 'number'));
-    form.appendChild(formField('target_voltage_mv', 'Zielspannung (mV)', existing?.target_voltage_mv ?? 4200, 'number'));
-    form.appendChild(formField('cutoff_voltage_mv', 'Cutoff-Spannung (mV)', existing?.cutoff_voltage_mv ?? 3200, 'number'));
-    form.appendChild(formField('termination_current_ma', 'Abschaltstrom (mA)', existing?.termination_current_ma ?? 100, 'number'));
-    form.appendChild(formField('delta_peak_mv', '\u0394-Peak (mV)', existing?.delta_peak_mv ?? 0, 'number'));
-    form.appendChild(formField('trickle_charge_ma', 'Erhaltungsladung (mA)', existing?.trickle_charge_ma ?? 0, 'number'));
     form.appendChild(formField('capacity_cutoff_mah', 'Kapazit\u00e4ts-Cutoff (mAh)', existing?.capacity_cutoff_mah ?? 3000, 'number'));
-    form.querySelector('[name="chemistry"]').value = existing?.chemistry || 'Li-Ion';
+
+    // Chemistry-dependent fields (voltage- vs delta-peak-terminated chemistries).
+    const chemWrap = document.createElement('div');
+    form.appendChild(chemWrap);
+    const chemSelect = form.querySelector('[name="chemistry"]');
+    const applyChemFields = () => {
+      chemWrap.innerHTML = '';
+      for (const name of chemFieldNames(chemSelect.value)) {
+        const f = CHEM_FIELDS[name];
+        chemWrap.appendChild(formField(name, f.label, existing?.[name] ?? f.def, 'number'));
+      }
+    };
+    chemSelect.value = existing?.chemistry || 'Li-Ion';
+    applyChemFields();
+    chemSelect.addEventListener('change', applyChemFields);
   } else {
     title.textContent = existing ? 'Zelle bearbeiten' : 'Zelle anlegen';
     form.appendChild(hiddenField('id', existing ? existing.id : genId('cell')));
