@@ -49,6 +49,23 @@ void test_buildStartStop(void) {
     assertPacket(p, {0x0F, 0x03, 0x93, 0x03, 0x96});
 }
 
+// Init-Sequenz (0x57/0x74/0x65/0xFE) exakt wie in der Referenz nach dem Connect.
+void test_buildInitSequence(void) {
+    auto dev = codec.buildDeviceInfo();
+    assertPacket(dev, {0x0F, 0x13, 0x57, 0x00, 0xFF, 0x34, 0x37, 0x38, 0xC1, 0xA4,
+                       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                       0x00, 0x5E});
+
+    auto ver = codec.buildVersion();
+    assertPacket(ver, {0x0F, 0x07, 0x74, 0x00, 0x00, 0x00, 0x00, 0x00, 0x74});
+
+    auto set = codec.buildSettings();
+    assertPacket(set, {0x0F, 0x04, 0x65, 0x00, 0x00, 0x65});
+
+    auto fe = codec.buildFeQuery();
+    assertPacket(fe, {0x0F, 0x03, 0xFE, 0x00, 0xFE});
+}
+
 void test_parseStatus_full(void) {
     std::vector<uint8_t> pkt = {
         0x0F, 0x15, 0x91, 0x01,
@@ -225,6 +242,7 @@ int main(int argc, char** argv) {
     RUN_TEST(test_checksumValid);
     RUN_TEST(test_buildStatusRequest);
     RUN_TEST(test_buildStartStop);
+    RUN_TEST(test_buildInitSequence);
     RUN_TEST(test_parseStatus_full);
     RUN_TEST(test_parseStatus_truncated);
     RUN_TEST(test_buildChargeConfig);

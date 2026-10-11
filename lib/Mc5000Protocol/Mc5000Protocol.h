@@ -59,6 +59,13 @@ public:
     Packet buildChargeConfig(const ChargeProfile& profile, int chemistryCode,
                              int slotBitmask, int capacityCutoffMah = 3000) const; // 0x94
 
+    // Init-Sequenz: muss nach dem BLE-Connect gesendet werden, sonst ignoriert
+    // der MC5000 Steuerkommandos wie Start/Stopp (vgl. rssdev10/skyrc-mc-rs).
+    Packet buildDeviceInfo() const;   // 0x57 Handshake
+    Packet buildVersion() const;      // 0x74
+    Packet buildSettings() const;     // 0x65
+    Packet buildFeQuery() const;      // 0xFE
+
     bool isConfigAckOk(const Packet& packet) const;     // 0x94-ACK (0f 04 94 <slot> 01 <cks>)
     SlotStatus parseStatus(const Packet& packet) const; // 0x91-Antwort (robust gegen Kürzung)
 

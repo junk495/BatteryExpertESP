@@ -93,6 +93,9 @@ public:
     bool getChargeDefaults(const char* cell_id, mc5000::ChargeProfile& out,
                            int& capacityCutoffMah) const;
 
+    // Nennkapazität (mAh) des Zelltyps der Zelle; 0, wenn Zelle/Typ nicht gefunden.
+    int getNominalCapacityMah(const char* cell_id) const;
+
     // Schließt einen Slot ab (Flankenerkennung "Completed" im Loop-Task):
     // hängt den Ergebnis-Datensatz an test_results an (falls eine Zelle zugeordnet
     // ist) und gibt den Slot wieder frei. Die Energie wird aus dem im

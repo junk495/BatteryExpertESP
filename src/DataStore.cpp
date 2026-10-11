@@ -467,6 +467,27 @@ bool DataStore::getChargeDefaults(const char* cell_id, mc5000::ChargeProfile& ou
     return true;
 }
 
+int DataStore::getNominalCapacityMah(const char* cell_id) const {
+    if (!cell_id || !_doc) {
+        return 0;
+    }
+    JsonArray cellsArr = (*_doc)[KEY_CELLS].as<JsonArray>();
+    const int cidx = findById(cellsArr, cell_id);
+    if (cidx < 0) {
+        return 0;
+    }
+    const char* type_id = cellsArr[cidx]["cell_type_id"] | "";
+    if (!type_id || type_id[0] == '\0') {
+        return 0;
+    }
+    JsonArray typesArr = (*_doc)[KEY_CELL_TYPES].as<JsonArray>();
+    const int tidx = findById(typesArr, type_id);
+    if (tidx < 0) {
+        return 0;
+    }
+    return typesArr[tidx]["nominal_capacity_mah"] | 0;
+}
+
 // Returns the more severe of two recommendations (SORT_OUT > WATCH > OK).
 static const char* worseRecommendation(const char* a, const char* b) {
     auto rank = [](const char* s) -> int {

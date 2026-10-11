@@ -349,6 +349,8 @@ function closeSlotModal() {
 async function startCharge() {
   const cellId = document.getElementById('slot-modal-cell').value;
   const mode = document.getElementById('slot-modal-mode').value;
+  const testSelect = document.getElementById('slot-modal-test');
+  const testType = testSelect ? testSelect.value : '';
   if (!cellId || !activeSlot) return;
 
   const slot = activeSlot;   // capture before closeSlotModal() resets it to 0
@@ -358,7 +360,13 @@ async function startCharge() {
   const chemistry = type ? chemistryToCode(type.chemistry) : 0;
 
   closeSlotModal();
-  await api('/api/charge', 'POST', { cell_id: cellId, slot, mode, chemistry });
+  await api('/api/charge', 'POST', {
+    cell_id: cellId,
+    slot,
+    mode: testType ? 'cycle' : mode,   // a test is always a full C->D cycle
+    chemistry,
+    testType: testType || undefined,
+  });
 }
 
 // --- entity modal (cell / type CRUD) -----------------------------------------
