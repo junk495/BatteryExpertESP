@@ -351,12 +351,14 @@ async function startCharge() {
   const mode = document.getElementById('slot-modal-mode').value;
   if (!cellId || !activeSlot) return;
 
+  const slot = activeSlot;   // capture before closeSlotModal() resets it to 0
+
   const cell = Store.cells.get(cellId);
   const type = cell ? Store.types.get(cell.cell_type_id) : null;
   const chemistry = type ? chemistryToCode(type.chemistry) : 0;
 
   closeSlotModal();
-  await api('/api/charge', 'POST', { cell_id: cellId, slot: activeSlot, mode, chemistry });
+  await api('/api/charge', 'POST', { cell_id: cellId, slot, mode, chemistry });
 }
 
 // --- entity modal (cell / type CRUD) -----------------------------------------
@@ -616,28 +618,28 @@ function init() {
   startSync(2000, () => { renderRegister(); renderTestResults(); });
 
   // slot modal
-  document.getElementById('slot-modal-cancel').addEventListener('click', closeSlotModal);
-  document.getElementById('slot-modal-start').addEventListener('click', startCharge);
+  document.getElementById('slot-modal-cancel')?.addEventListener('click', closeSlotModal);
+  document.getElementById('slot-modal-start')?.addEventListener('click', startCharge);
 
   // entity modal
-  document.getElementById('entity-modal-cancel').addEventListener('click', closeEntityModal);
-  document.getElementById('entity-modal-save').addEventListener('click', saveEntity);
-  document.getElementById('btn-add-type').addEventListener('click', () => openEntityModal('type'));
-  document.getElementById('btn-add-cell').addEventListener('click', () => openEntityModal('cell'));
+  document.getElementById('entity-modal-cancel')?.addEventListener('click', closeEntityModal);
+  document.getElementById('entity-modal-save')?.addEventListener('click', saveEntity);
+  document.getElementById('btn-add-type')?.addEventListener('click', () => openEntityModal('type'));
+  document.getElementById('btn-add-cell')?.addEventListener('click', () => openEntityModal('cell'));
 
   // settings (BLE + WLAN)
-  document.getElementById('btn-ble-scan').addEventListener('click', scanBle);
-  document.getElementById('btn-ble-disconnect').addEventListener('click', disconnectBle);
-  document.getElementById('btn-wifi-save').addEventListener('click', saveWifi);
+  document.getElementById('btn-ble-scan')?.addEventListener('click', scanBle);
+  document.getElementById('btn-ble-disconnect')?.addEventListener('click', disconnectBle);
+  document.getElementById('btn-wifi-save')?.addEventListener('click', saveWifi);
 
   // update (version)
-  document.getElementById('btn-update').addEventListener('click', applyUpdate);
+  document.getElementById('btn-update')?.addEventListener('click', applyUpdate);
   checkVersion();
   setInterval(checkVersion, 30000);
 
   // table actions (event delegation)
-  document.getElementById('types-body').addEventListener('click', onRowAction('type'));
-  document.getElementById('cells-body').addEventListener('click', onRowAction('cell'));
+  document.getElementById('types-body')?.addEventListener('click', onRowAction('type'));
+  document.getElementById('cells-body')?.addEventListener('click', onRowAction('cell'));
 
   // service worker
   if ('serviceWorker' in navigator) {
