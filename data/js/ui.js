@@ -225,7 +225,13 @@ function renderSlot(num, s, points) {
       <div class="metric"><span class="k">Modus</span><span class="v">${esc(s.mode)}</span></div>
     </div>
     ${err}
-    ${renderChart(points)}`;
+    ${renderChart(points)}
+    <div class="slot-actions">
+      <button data-belegen>Belegen</button>
+      <button data-stop class="danger">Stopp</button>
+    </div>`;
+  el.querySelector('[data-belegen]').addEventListener('click', (e) => { e.stopPropagation(); openSlotModal(num); });
+  el.querySelector('[data-stop]').addEventListener('click', (e) => { e.stopPropagation(); api('/api/startstop', 'POST', { action: 0 }); });
   return el;
 }
 

@@ -210,7 +210,10 @@ bool DataStore::applyMutation(EntityType entity, OpType op, const char* id,
             return false;
         }
         const char* key = (entity == EntityType::CELL) ? KEY_CELLS : KEY_CELL_TYPES;
-        JsonArray arr = (*_doc)[key].to<JsonArray>();   // creates the array if missing
+        JsonArray arr = (*_doc)[key].as<JsonArray>();
+        if (arr.isNull()) {
+            arr = (*_doc)[key].to<JsonArray>();   // create only if missing
+        }
         const int idx = findById(arr, id);
         if (idx < 0) {
             return false;   // nothing to delete
@@ -245,7 +248,10 @@ bool DataStore::applyMutation(EntityType entity, OpType op, const char* id,
 
         const char* key = (entity == EntityType::CELL) ? KEY_CELLS : KEY_CELL_TYPES;
         const char* wrapper = (entity == EntityType::CELL) ? "cell" : "type";
-        JsonArray arr = (*_doc)[key].to<JsonArray>();   // creates the array if missing
+        JsonArray arr = (*_doc)[key].as<JsonArray>();
+        if (arr.isNull()) {
+            arr = (*_doc)[key].to<JsonArray>();   // create only if missing
+        }
         const int idx = findById(arr, eid);
         if (idx >= 0) {
             arr[idx] = obj;   // replace

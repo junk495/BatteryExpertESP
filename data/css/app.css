@@ -170,6 +170,12 @@ main { max-width: 960px; margin: 1.25rem auto; padding: 0 1rem 5.5rem; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.slot-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.slot-actions button { flex: 1; }
 .slot h3 {
   margin: 0;
   font-size: 1rem;
