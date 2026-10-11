@@ -78,12 +78,26 @@ bool DataStore::begin() {
         seedDocument();
     }
 
-    // Debug: log the document shape after init to diagnose full-sync issues.
+    // Reject a corrupted checkpoint (raw control chars from an earlier bug) and
+    // log the document shape after init.
     {
-        const size_t dbgLen = measureJson(*_doc);
-        std::vector<char> dbg(dbgLen + 1);
-        serializeJson(*_doc, dbg.data(), dbgLen + 1);
-        Serial.printf("[store] doc after init: %s\n", dbg.data());
+        const size_t checkLen = measureJson(*_doc);
+        std::vector<char> check(checkLen + 1);
+        serializeJson(*_doc, check.data(), checkLen + 1);
+        bool corrupt = false;
+        for (size_t i = 0; i < checkLen; ++i) {
+            const unsigned char c = (unsigned char)check[i];
+            if (c < 0x20 && c != '\t' && c != '\n' && c != '\r') {
+                corrupt = true;
+                break;
+            }
+        }
+        if (corrupt) {
+            Serial.println("[store] checkpoint corrupt -> seed");
+            seedDocument();
+        } else {
+            Serial.printf("[store] doc after init: %s\n", check.data());
+        }
     }
 
     for (int i = 0; i < MAX_SLOTS; ++i) {
@@ -225,7 +239,9 @@ bool DataStore::applyMutation(EntityType entity, OpType op, const char* id,
         if (!eid || eid[0] == '\0') {
             return false;
         }
-        obj["id"] = eid;
+        if (obj["id"].isNull()) {
+            obj["id"] = eid;   // id came only from the URL, not the body
+        }
 
         const char* key = (entity == EntityType::CELL) ? KEY_CELLS : KEY_CELL_TYPES;
         const char* wrapper = (entity == EntityType::CELL) ? "cell" : "type";
@@ -259,7 +275,9 @@ bool DataStore::applyMutation(EntityType entity, OpType op, const char* id,
         if (!eid || eid[0] == '\0') {
             return false;
         }
-        obj["id"] = eid;
+        if (obj["id"].isNull()) {
+            obj["id"] = eid;   // id came only from the URL, not the body
+        }
         if (obj["timestamp_s"].isNull()) {
             obj["timestamp_s"] = nowSeconds();   // inject absolute epoch if missing
         }
@@ -342,9 +360,21 @@ bool DataStore::loadDocument() {
         Serial.println("[store] NVS read failed");
         return false;
     }
-    const DeserializationError err = deserializeJson(*_doc, buf.data(), len);
+    // Pass a const char* so ArduinoJson selects StringCopier (copies strings
+    // into the document pool). A non-const char* would select StringMover,
+    // which links strings to this buffer — a dangling pointer once it's freed.
+    const char* json = buf.data();
+    const DeserializationError err = deserializeJson(*_doc, json, len);
     if (err || !_doc->is<JsonObject>()) {
         Serial.printf("[store] checkpoint parse failed: %s\n", err.c_str());
+        return false;
+    }
+    // Shape check: the three collections must be arrays (guards against a
+    // previously corrupted checkpoint).
+    if (!(*_doc)[KEY_CELL_TYPES].is<JsonArray>() ||
+        !(*_doc)[KEY_CELLS].is<JsonArray>() ||
+        !(*_doc)[KEY_TEST_RESULTS].is<JsonArray>()) {
+        Serial.println("[store] checkpoint invalid shape -> seed");
         return false;
     }
     Serial.printf("[store] checkpoint loaded (%u bytes)\n", (unsigned)len);
