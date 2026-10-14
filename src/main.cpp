@@ -4,6 +4,7 @@
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <esp_heap_caps.h>
+#include <soc/rtc_cntl_struct.h>   // TEMP diagnostic: brownout detector register access
 
 #include "config.h"
 #include "Mc5000Protocol.h"
@@ -267,7 +268,26 @@ static void setupWifi() {
 }
 
 // ---------- Setup / Loop ----------
+
+// TEMP diagnostic: fully disable the brownout detector to tell a spurious BOD
+// trigger (default level 7 ~ 2.98 V, too sensitive for the 8 MB OPI PSRAM) from
+// a real power problem. Runs before setup() via initVariant().
+static void disableBrownoutDetector() {
+    // Give software control over the mode1 (analog) BOD reset, then disable it.
+    RTCCNTL.fib_sel.val &= ~0x2UL;      // clear BROWNOUT_DETECTOR_LL_FIB_ENABLE
+    RTCCNTL.brown_out.ena = 0;          // BOD detection enable
+    RTCCNTL.brown_out.rst_ena = 0;      // BOD reset enable
+    RTCCNTL.brown_out.ana_rst_en = 0;   // BOD analog (mode1) reset enable
+    RTCCNTL.int_ena.rtc_brown_out = 0;  // BOD interrupt enable
+}
+
+// Arduino-ESP32 early hook, called before setup() and after the core init.
+void initVariant() {
+    disableBrownoutDetector();
+}
+
 void setup() {
+    disableBrownoutDetector();   // TEMP diagnostic (belt & suspenders)
     Serial.begin(115200);
     delay(300);
     Serial.println("\n[M5000Bridge] Start");
