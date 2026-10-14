@@ -4,10 +4,12 @@
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <esp_heap_caps.h>
+#include <cstring>
 #include <soc/rtc_cntl_struct.h>   // TEMP diagnostic: brownout detector register access
 
 #include "config.h"
 #include "Mc5000Protocol.h"
+#include "AssessmentLogic.h"
 #include "Mc5000BleClient.h"
 #include "DataStore.h"
 #include "ApiServer.h"
@@ -25,6 +27,7 @@ static std::string last_status[4];   // vorheriger Slot-Status (Completed-Flanke
 
 static unsigned long g_lastPoll = 0;
 static unsigned long g_lastReconnect = 0;
+static unsigned long g_pollPauseUntil = 0;   // Polling pausieren, bis der MC5000 das Steuerkommando verarbeitet hat
 
 // Gewählte Ladegerät-MAC (persistent gespeichert); leer = keine Auswahl.
 static String g_bleAddress;
@@ -138,7 +141,7 @@ static String buildInfoJson() {
 }
 
 static String buildScanJson() {
-    auto devices = g_ble.scanDevices(3);
+    auto devices = g_ble.scanDevices(5000);
     DynamicJsonDocument doc(4096);
     JsonArray arr = doc.createNestedArray("devices");
     for (const auto& d : devices) {
@@ -151,10 +154,27 @@ static String buildScanJson() {
     return out;
 }
 
+// Init-Sequenz nach erfolgreichem BLE-Connect: 0x57 + 0x74 + 0x65 + 0xFE.
+// Ohne diese Pakete ignoriert der MC5000 Steuerkommandos wie Start/Stopp.
+static void sendInitSequence() {
+    g_ble.writePacket(g_protocol.buildDeviceInfo());
+    delay(500);
+    g_ble.writePacket(g_protocol.buildVersion());
+    delay(200);
+    g_ble.writePacket(g_protocol.buildSettings());
+    delay(200);
+    g_ble.writePacket(g_protocol.buildFeQuery());
+    delay(200);
+}
+
 // ---------- Verbindungs-Handler ----------
 static bool handleConnect(const String& address) {
     saveAddress(address);
-    return g_ble.connect(address.c_str());
+    const bool ok = g_ble.connect(address.c_str());
+    if (ok) {
+        sendInitSequence();
+    }
+    return ok;
 }
 
 static bool handleDisconnect() {
@@ -170,31 +190,79 @@ static bool handleCharge(const JsonObject& j) {
     if (slot < 1 || slot > 4) return false;
 
     mc5000::ChargeProfile p;
-    p.mode = (const char*)(j["mode"] | "charge");
-    p.chargeCurrentMa = j["chargeCurrentMa"] | 1000;
-    p.dischargeCurrentMa = j["dischargeCurrentMa"] | 1000;
-    p.targetVoltageMv = j["targetVoltageMv"] | 4200;
-    p.cutoffVoltageMv = j["cutoffVoltageMv"] | 3200;
-    p.terminationCurrentMa = j["terminationCurrentMa"] | 100;
-    p.cycleDirection = j["cycleDirection"] | 0;
-    p.cycleCount = j["cycleCount"] | 1;
-    p.restChargeMin = j["restChargeMin"] | 10;
-    p.restDischargeMin = j["restDischargeMin"] | 10;
-    p.trickleChargeMa = j["trickleChargeMa"] | 0;
-    p.deltaPeakMv = j["deltaPeakMv"] | 0;
-    p.cutoffTimerMin = j["cutoffTimerMin"] | 0;
-    p.maxTimeMin = j["maxTimeMin"] | 0;
+    p.mode = "charge";
+    p.chargeCurrentMa = 1000;
+    p.dischargeCurrentMa = 1000;
+    p.targetVoltageMv = 4200;
+    p.cutoffVoltageMv = 3200;
+    p.terminationCurrentMa = 100;
+    p.cycleDirection = 0;
+    p.cycleCount = 1;
+    p.restChargeMin = 10;
+    p.restDischargeMin = 10;
+    p.trickleChargeMa = 0;
+    p.deltaPeakMv = 0;
+    p.cutoffTimerMin = 0;
+    p.maxTimeMin = 0;
+    int capacityCutoffMah = 3000;
+
+    // Defaults aus dem Zelltyp der Zelle laden (überschreibbar durch JSON).
+    const char* cell_id = j["cell_id"] | "";
+    if (cell_id[0] != '\0') {
+        g_store.getChargeDefaults(cell_id, p, capacityCutoffMah);
+    }
+
+    // Explizite JSON-Felder überschreiben die Defaults.
+    if (!j["mode"].isNull())                 p.mode = j["mode"] | "charge";
+    if (!j["chargeCurrentMa"].isNull())      p.chargeCurrentMa = j["chargeCurrentMa"];
+    if (!j["dischargeCurrentMa"].isNull())   p.dischargeCurrentMa = j["dischargeCurrentMa"];
+    if (!j["targetVoltageMv"].isNull())      p.targetVoltageMv = j["targetVoltageMv"];
+    if (!j["cutoffVoltageMv"].isNull())      p.cutoffVoltageMv = j["cutoffVoltageMv"];
+    if (!j["terminationCurrentMa"].isNull()) p.terminationCurrentMa = j["terminationCurrentMa"];
+    if (!j["cycleDirection"].isNull())       p.cycleDirection = j["cycleDirection"];
+    if (!j["cycleCount"].isNull())           p.cycleCount = j["cycleCount"];
+    if (!j["restChargeMin"].isNull())        p.restChargeMin = j["restChargeMin"];
+    if (!j["restDischargeMin"].isNull())     p.restDischargeMin = j["restDischargeMin"];
+    if (!j["trickleChargeMa"].isNull())      p.trickleChargeMa = j["trickleChargeMa"];
+    if (!j["deltaPeakMv"].isNull())          p.deltaPeakMv = j["deltaPeakMv"];
+    if (!j["cutoffTimerMin"].isNull())       p.cutoffTimerMin = j["cutoffTimerMin"];
+    if (!j["maxTimeMin"].isNull())           p.maxTimeMin = j["maxTimeMin"];
+    if (!j["capacityCutoffMah"].isNull())    capacityCutoffMah = j["capacityCutoffMah"];
+
+    // Testtyp (Schnell/Genau): voller Cycle C->D mit Testströmen aus der
+    // Nennkapazität (analog zur Android-App AssessmentLogic.computeDefaults).
+    const char* testType = j["testType"] | "";
+    if (testType[0] != '\0' && cell_id[0] != '\0') {
+        const int nominal = g_store.getNominalCapacityMah(cell_id);
+        if (nominal > 0) {
+            const assessment::TestCurrents tc = assessment::computeTestCurrents(nominal);
+            const bool fast = (strcmp(testType, "fast") == 0);
+            p.mode = "cycle";   // voller Lade-/Entladezyklus
+            p.chargeCurrentMa = fast ? tc.fastChargeMa : tc.slowChargeMa;
+            p.dischargeCurrentMa = fast ? tc.fastDischargeMa : tc.slowDischargeMa;
+        }
+    }
 
     const int mask = (slot == 1) ? 1 : (slot == 2) ? 2 : (slot == 3) ? 4 : 8;
 
-    if (!g_ble.writePacket(g_protocol.buildChargeConfig(p, chemistry, mask))) {
+    if (!g_ble.writePacket(g_protocol.buildChargeConfig(p, chemistry, mask, capacityCutoffMah))) {
         return false;
     }
-    return g_ble.writePacket(g_protocol.buildStartStop(mask));   // Slot starten
+    const bool started = g_ble.writePacket(g_protocol.buildStartStop(mask));   // Slot starten
+    if (started) {
+        g_pollPauseUntil = millis() + CONTROL_PAUSE_MS;
+    }
+    return started;
 }
 
 static bool handleStartStop(int action) {
-    return g_ble.writePacket(g_protocol.buildStartStop(action));
+    Serial.printf("[ble] startstop action=%d\n", action);
+    const bool ok = g_ble.writePacket(g_protocol.buildStartStop(action));
+    Serial.printf("[ble] startstop write %s\n", ok ? "ok" : "FAILED");
+    if (ok) {
+        g_pollPauseUntil = millis() + CONTROL_PAUSE_MS;
+    }
+    return ok;
 }
 
 // ---------- WiFi ----------
@@ -213,8 +281,8 @@ static bool connectWifi() {
         return false;
     }
     Serial.printf("[wifi] verbinde mit %s ...\n", g_wifiSsid.c_str());
-    WiFi.disconnect();
     WiFi.mode(WIFI_STA);
+    WiFi.disconnect();
     WiFi.setHostname(HOSTNAME);
     WiFi.begin(g_wifiSsid.c_str(), g_wifiPass.c_str());
 
@@ -321,6 +389,7 @@ void setup() {
         Serial.printf("[ble] gespeichertes Ladegerät: %s\n", g_bleAddress.c_str());
         if (g_ble.connect(g_bleAddress.c_str())) {
             Serial.println("[ble] verbunden");
+            sendInitSequence();
         } else {
             Serial.println("[ble] Verbindung fehlgeschlagen (wird erneut versucht)");
         }
@@ -372,7 +441,7 @@ void loop() {
     g_api.handle();
 
     if (g_ble.isConnected()) {
-        if (millis() - g_lastPoll >= POLL_INTERVAL_MS) {
+        if (millis() - g_lastPoll >= POLL_INTERVAL_MS && millis() >= g_pollPauseUntil) {
             g_lastPoll = millis();
             processStatus();   // vorherige Poll-Ergebnisse (während der Wartezeit angekommen)
             const int masks[4] = {1, 2, 4, 8};
@@ -386,7 +455,9 @@ void loop() {
         if (millis() - g_lastReconnect >= RECONNECT_DELAY_MS) {
             g_lastReconnect = millis();
             Serial.println("[ble] versuche Verbindung ...");
-            g_ble.connect(g_bleAddress.c_str());
+            if (g_ble.connect(g_bleAddress.c_str())) {
+                sendInitSequence();
+            }
         }
     }
 }

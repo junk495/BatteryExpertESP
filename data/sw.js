@@ -4,7 +4,7 @@
 // reload. The cache only kicks in when the ESP is unreachable (offline).
 // API calls (/api/*) always bypass the cache.
 
-const CACHE = 'batteryexpert-v1';   // bump on release (forces cache rebuild)
+const CACHE = 'batteryexpert-v2';   // bump on release (forces cache rebuild)
 const ASSETS = [
   './',
   './index.html',
@@ -13,6 +13,8 @@ const ASSETS = [
   './js/sync.js',
   './js/ui.js',
   './manifest.json',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
 ];
 
 self.addEventListener('install', (e) => {

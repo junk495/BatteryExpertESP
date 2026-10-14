@@ -15,8 +15,8 @@ Das System entkoppelt drei Aufgaben sauber:
 - **Datenbereitstellung (HTTP-Loop-Task):** Delta-/Live-Endpunkte für die Clients.
 
 **Zustandsmodell:** Der dauerhafte Systemzustand liegt als JSON-Dokument dauerhaft im
-PSRAM. Änderungen werden erst nach Validierung als neuer Checkpoint in den Flash
-(LittleFS) geschrieben. Dasselbe LittleFS-Dateisystem hält zusätzlich die statischen
+PSRAM. Änderungen werden erst nach Validierung als neuer Checkpoint in den NVS
+(Preferences) geschrieben. Das LittleFS-Dateisystem hält ausschließlich die statischen
 PWA-Assets (`data/`), die der `ApiServer` als Weboberfläche ausliefert.
 
 **Inkrementelle Checkpoints:** Jeder gültige Zustandswechsel erhöht einen monoton
@@ -165,4 +165,4 @@ Das Erkennen und Verarbeiten von `Completed` liegt vollständig im **HTTP-Loop-T
 
 - Exakter Inhalt der dauerhaften Strukturen (Felder je Entität).
 - Konkrete Checkpoint-Ereignisse (welche Mutationen einen Flash-Write auslösen).
-- LittleFS-Partitionsgröße.
+- NVS-Partitionsgröße (Platz für den Checkpoint).

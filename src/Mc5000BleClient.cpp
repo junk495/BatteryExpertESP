@@ -1,5 +1,6 @@
 #include "Mc5000BleClient.h"
 
+#include <Arduino.h>
 #include <NimBLEDevice.h>
 
 #include "config.h"
@@ -45,12 +46,14 @@ void Mc5000BleClient::disconnect() {
     _connected = false;
 }
 
-std::vector<BleDeviceInfo> Mc5000BleClient::scanDevices(uint32_t scanSeconds) {
+std::vector<BleDeviceInfo> Mc5000BleClient::scanDevices(uint32_t scanMillis) {
     std::vector<BleDeviceInfo> result;
 
     NimBLEScan* scan = NimBLEDevice::getScan();
     scan->setActiveScan(true);
-    NimBLEScanResults results = scan->getResults(scanSeconds);   // blocking scan
+    NimBLEScanResults results = scan->getResults(scanMillis);   // blocking scan (Millisekunden!)
+
+    Serial.printf("[ble] Scan beendet: %d Gerät(e) gefunden\n", (int)results.getCount());
 
     for (int i = 0; i < results.getCount(); ++i) {
         const NimBLEAdvertisedDevice* dev = results.getDevice(i);
@@ -61,6 +64,7 @@ std::vector<BleDeviceInfo> Mc5000BleClient::scanDevices(uint32_t scanSeconds) {
         info.name = dev->getName();
         info.address = dev->getAddress().toString();
         result.push_back(info);
+        Serial.printf("[ble]   - %s (%s)\n", info.name.c_str(), info.address.c_str());
     }
 
     scan->clearResults();

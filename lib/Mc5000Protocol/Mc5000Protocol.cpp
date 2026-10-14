@@ -44,6 +44,33 @@ Mc5000Protocol::Packet Mc5000Protocol::buildStartStop(int action) const {
     return buildPacket(0x93, {static_cast<uint8_t>(action)});
 }
 
+// Init-Sequenz: muss nach dem BLE-Connect gesendet werden, sonst ignoriert der
+// MC5000 Steuerkommandos wie Start/Stopp (Referenz: rssdev10/skyrc-mc-rs).
+Mc5000Protocol::Packet Mc5000Protocol::buildDeviceInfo() const {
+    // Exakte Bytes aus dem Capture der offiziellen App:
+    // 0f 13 57 00 ff 34 37 38 c1 a4 00 00 00 00 00 00 00 00 00 00 00 5e
+    return {
+        0x0F, 0x13, 0x57, 0x00, 0xFF, 0x34, 0x37, 0x38, 0xC1, 0xA4,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x5E
+    };
+}
+
+Mc5000Protocol::Packet Mc5000Protocol::buildVersion() const {
+    // 0f 07 74 00 00 00 00 00 74
+    return buildPacket(0x74, {0x00, 0x00, 0x00, 0x00, 0x00});
+}
+
+Mc5000Protocol::Packet Mc5000Protocol::buildSettings() const {
+    // 0f 04 65 00 00 65
+    return buildPacket(0x65, {0x00, 0x00});
+}
+
+Mc5000Protocol::Packet Mc5000Protocol::buildFeQuery() const {
+    // 0f 03 fe 00 fe
+    return buildPacket(0xFE, {0x00});
+}
+
 Mc5000Protocol::Packet Mc5000Protocol::buildChargeConfig(
         const ChargeProfile& profile, int chemistryCode, int slotBitmask, int capacityCutoffMah) const {
     Packet packet(44, 0);

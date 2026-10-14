@@ -1,4 +1,4 @@
-// ui.js — PWA entry point: live dashboard, cell register and history views.
+// ui.js — PWA entry point: live dashboard, cell register and test-result views.
 //
 // Consumes `Store` (state.js) for all synced data and drives the views via the
 // REST endpoints. No framework, no build step — plain ES modules.
@@ -23,6 +23,29 @@ const CHEMISTRY_CODES = {
   'li-ion': 0, 'li-ion hv': 1, 'lifepo4': 2, 'nimh': 3, 'nicd': 4,
   'eneloop': 5, 'nizn': 6, 'ram': 7, 'lto': 8, 'na-ion': 9,
 };
+
+// Chemistry-dependent charge-program fields. The MC5000 ends NiMH-family cells
+// (NiMH/NiCd/Eneloop/NiZn) via delta-peak + trickle charge, while the other
+// chemistries (Li-*, RAM, LTO, Na-Ion) charge to a target voltage and stop at a
+// termination current. The cell-type form only shows the relevant set.
+const DELTA_PEAK_CHEMISTRIES = new Set(['nimh', 'nicd', 'eneloop', 'nizn']);
+
+const CHEM_FIELDS = {
+  target_voltage_mv:      { label: 'Zielspannung (mV)',     def: 4200 },
+  cutoff_voltage_mv:      { label: 'Cutoff-Spannung (mV)',  def: 3200 },
+  termination_current_ma: { label: 'Abschaltstrom (mA)',    def: 100 },
+  delta_peak_mv:          { label: '\u0394-Peak (mV)',      def: 0 },
+  trickle_charge_ma:      { label: 'Erhaltungsladung (mA)', def: 0 },
+};
+
+const VOLTAGE_FIELDS = ['target_voltage_mv', 'cutoff_voltage_mv', 'termination_current_ma'];
+const DELTA_PEAK_FIELDS = ['delta_peak_mv', 'trickle_charge_ma'];
+
+function chemFieldNames(chemistry) {
+  return DELTA_PEAK_CHEMISTRIES.has(String(chemistry || '').toLowerCase())
+    ? DELTA_PEAK_FIELDS
+    : VOLTAGE_FIELDS;
+}
 
 // --- helpers -----------------------------------------------------------------
 
@@ -61,19 +84,100 @@ async function api(path, method = 'GET', body) {
   return resp.json().catch(() => ({}));
 }
 
-function sparkline(points) {
-  const vs = points.map((p) => p[1]);   // voltage_mv
-  if (vs.length < 2) return '';
-  const max = Math.max(...vs);
-  const min = Math.min(...vs);
-  const range = max - min || 1;
-  const w = 110;
-  const h = 30;
-  const coords = vs
-    .map((v, i) => `${(i / (vs.length - 1) * w).toFixed(1)},${(h - ((v - min) / range) * h).toFixed(1)}`)
-    .join(' ');
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">` +
-    `<polyline points="${coords}" fill="none" stroke="#1a73e8" stroke-width="1.5"/></svg>`;
+function niceMinuteStep(totalMinutes) {
+  const steps = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720];
+  if (totalMinutes <= 0) return 1;
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const s = steps[i];
+    const ticks = totalMinutes / s;
+    if (ticks >= 4 && ticks <= 10) return s;
+  }
+  return steps[0];
+}
+
+function fmtAxisMin(minutes) {
+  const m = Math.round(minutes);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return mm === 0 ? `${h} h` : `${h} h ${mm} min`;
+}
+
+function niceTicks(min, max, n) {
+  const range = max - min;
+  if (!(range > 0)) return [min];
+  const rawStep = range / (n - 1);
+  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const norm = rawStep / mag;
+  const step = (norm < 1.5 ? 1 : norm < 3.5 ? 2 : norm < 7.5 ? 5 : 10) * mag;
+  const start = Math.ceil(min / step) * step;
+  const ticks = [];
+  for (let v = start; v <= max + step * 1e-6; v += step) ticks.push(Number(v.toFixed(4)));
+  return ticks;
+}
+
+function fmtAxisY(v) {
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+}
+
+function renderChart(points) {
+  if (!points || points.length < 2) return '';
+
+  const t0 = points[0][0];
+  const rows = points.map((p) => ({
+    t: (p[0] - t0) / 60,   // minutes
+    v: p[1] / 1000,        // V
+    c: p[2] / 1000,        // A
+  }));
+
+  const vMin = Math.min(...rows.map((r) => r.v));
+  const vMax = Math.max(...rows.map((r) => r.v));
+  const cMin = Math.min(...rows.map((r) => r.c));
+  const cMax = Math.max(...rows.map((r) => r.c));
+  let yMin = Math.min(vMin, cMin);
+  let yMax = Math.max(vMax, cMax);
+  const ySpan = yMax - yMin;
+  if (ySpan < 1e-9) { const mid = (yMax + yMin) / 2; yMin = mid - 0.25; yMax = mid + 0.25; }
+  else { const pad = ySpan * 0.1; yMin -= pad; yMax += pad; }
+
+  const yTicks = niceTicks(yMin, yMax, 5);
+
+  const xMax = Math.max(rows[rows.length - 1].t, 1);
+  const xStep = niceMinuteStep(xMax);
+  const xTicks = [];
+  for (let m = 0; m <= xMax + 1e-6; m += xStep) xTicks.push(m);
+
+  const padL = 38, padB = 20, padT = 6, padR = 6;
+  const W = 320, H = 140;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  const x = (t) => padL + (t / xMax) * plotW;
+  const y = (val) => padT + ((yMax - val) / (yMax - yMin)) * plotH;
+
+  const line = (getter, color) =>
+    `<polyline points="${rows.map((r) => `${x(r.t).toFixed(1)},${y(getter(r)).toFixed(1)}`).join(' ')}" ` +
+    `fill="none" stroke="${color}" stroke-width="1.5"/>`;
+
+  const grid = yTicks.map((t) => {
+    const yy = y(t).toFixed(1);
+    return `<line x1="${padL}" y1="${yy}" x2="${W - padR}" y2="${yy}" class="grid"/>` +
+      `<text x="${padL - 6}" y="${yy}" class="axis-y" dy="0.32em" text-anchor="end">${fmtAxisY(t)}</text>`;
+  }).join('');
+
+  const xgrid = xTicks.map((t) => {
+    const xx = x(t).toFixed(1);
+    return `<line x1="${xx}" y1="${padT}" x2="${xx}" y2="${padT + plotH}" class="grid"/>` +
+      `<text x="${xx}" y="${H - 4}" class="axis-x" text-anchor="middle">${fmtAxisMin(t)}</text>`;
+  }).join('');
+
+  return `<div class="chart-title">Spannungs- & Stromverlauf (Live)</div>` +
+    `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">` +
+    grid + xgrid +
+    line((r) => r.c, '#e53935') + line((r) => r.v, '#1e88e5') +
+    `</svg>` +
+    `<div class="chart-legend"><span><i class="sw sw-v"></i>Spannung (V)</span>` +
+    `<span><i class="sw sw-c"></i>Strom (A)</span></div>`;
 }
 
 // --- dashboard ---------------------------------------------------------------
@@ -105,17 +209,29 @@ function renderSlot(num, s, points) {
   }
 
   el.className = 'slot';
+  const err = s.error ? `<p class="slot-error">Fehler: ${esc(s.error)}</p>` : '';
   el.innerHTML = `
-    <h3>Slot ${num}</h3>
-    <div class="status ${esc(s.status)}">${esc(s.status)}</div>
-    <div class="row"><span class="k">Modus</span><span>${esc(s.mode)}</span></div>
-    <div class="row"><span class="k">Spannung</span><span>${(s.voltageV || 0).toFixed(3)} V</span></div>
-    <div class="row"><span class="k">Strom</span><span>${(s.currentA || 0).toFixed(3)} A</span></div>
-    <div class="row"><span class="k">Kapazit\u00e4t</span><span>${s.capacityMah ?? 0} mAh</span></div>
-    <div class="row"><span class="k">Temp</span><span>${(s.temperatureC || 0).toFixed(1)} \u00b0C</span></div>
-    <div class="row"><span class="k">IR</span><span>${s.internalResistanceMOhm ?? 0} m\u03a9</span></div>
-    <div class="row"><span class="k">Zeit</span><span>${fmtElapsed(s.elapsedSeconds)}</span></div>
-    ${sparkline(points)}`;
+    <div class="slot-head">
+      <h3>Slot ${num}</h3>
+      <span class="slot-chem">${esc(s.chemistry)}</span>
+      <span class="status-pill ${esc(s.status)}"><i class="dot"></i>${esc(s.status)}</span>
+    </div>
+    <div class="metrics">
+      <div class="metric"><span class="k">Spannung</span><span class="v">${(s.voltageV || 0).toFixed(3)} V</span></div>
+      <div class="metric"><span class="k">Strom</span><span class="v">${(s.currentA || 0).toFixed(3)} A</span></div>
+      <div class="metric"><span class="k">Kapazit\u00e4t</span><span class="v">${s.capacityMah ?? 0} mAh</span></div>
+      <div class="metric"><span class="k">Zeit</span><span class="v">${fmtElapsed(s.elapsedSeconds)}</span></div>
+      <div class="metric"><span class="k">Innenwiderstand</span><span class="v">${s.internalResistanceMOhm ?? 0} m\u03a9</span></div>
+      <div class="metric"><span class="k">Modus</span><span class="v">${esc(s.mode)}</span></div>
+    </div>
+    ${err}
+    ${renderChart(points)}
+    <div class="slot-actions">
+      <button data-belegen>Belegen</button>
+      <button data-stop class="danger">Stopp</button>
+    </div>`;
+  el.querySelector('[data-belegen]').addEventListener('click', (e) => { e.stopPropagation(); openSlotModal(num); });
+  el.querySelector('[data-stop]').addEventListener('click', (e) => { e.stopPropagation(); api('/api/startstop', 'POST', { action: 0 }); });
   return el;
 }
 
@@ -124,7 +240,8 @@ function fmtElapsed(sec) {
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
-  return `${h}h ${m}m ${s}s`;
+  const pad = (n) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
 // --- register ----------------------------------------------------------------
@@ -143,8 +260,8 @@ function renderTypes() {
       <td>${esc(t.manufacturer)}</td>
       <td>${esc(t.model)}</td>
       <td>${esc(t.chemistry)}</td>
-      <td>${t.nominal_capacity_mah ?? 0} mAh</td>
-      <td>${(t.nominal_voltage_mv ?? 0) / 1000} V</td>
+      <td class="hide-sm">${t.nominal_capacity_mah ?? 0} mAh</td>
+      <td class="hide-sm">${(t.nominal_voltage_mv ?? 0) / 1000} V</td>
       <td class="actions">
         <button data-action="edit" data-id="${esc(t.id)}">\u270e</button>
         <button data-action="delete" data-id="${esc(t.id)}" class="danger">\u2715</button>
@@ -161,7 +278,7 @@ function renderCells() {
     tr.innerHTML = `
       <td>${c.number ?? ''}</td>
       <td>${esc(c.label)}</td>
-      <td>${esc(typeLabel(Store.types.get(c.cell_type_id)))}</td>
+      <td class="hide-sm">${esc(typeLabel(Store.types.get(c.cell_type_id)))}</td>
       <td><span class="badge ${esc(c.status)}">${esc(c.status)}</span></td>
       <td class="actions">
         <button data-action="edit" data-id="${esc(c.id)}">\u270e</button>
@@ -171,12 +288,12 @@ function renderCells() {
   }
 }
 
-// --- history -----------------------------------------------------------------
+// --- test results ------------------------------------------------------------
 
-function renderHistory() {
-  const body = document.getElementById('history-body');
+function renderTestResults() {
+  const body = document.getElementById('results-body');
   body.innerHTML = '';
-  for (const h of Store.history.slice().reverse()) {
+  for (const h of Store.testResults.slice().reverse()) {
     const cell = Store.cells.get(h.cell_id);
     const label = cell ? (cell.label || `#${cell.number}`) : h.cell_id;
     const tr = document.createElement('tr');
@@ -184,9 +301,11 @@ function renderHistory() {
       <td>${formatTime(h.timestamp_s)}</td>
       <td>${esc(label)}</td>
       <td>${esc(h.action)}</td>
-      <td>${h.capacity_mah ?? 0} mAh</td>
-      <td>${h.energy_mwh ?? 0} mWh</td>
-      <td>${h.ir_mohm ?? 0} m\u03a9</td>`;
+      <td>${h.measured_capacity_mah ?? 0} mAh</td>
+      <td class="hide-sm">${h.energy_mwh ?? 0} mWh</td>
+      <td class="hide-sm">${h.measured_ir_mohm ?? 0} m\u03a9</td>
+      <td>${h.soh_nominal_percent != null ? h.soh_nominal_percent + '%' : '\u2014'}</td>
+      <td><span class="rec ${esc(h.recommendation)}">${esc(h.recommendation)}</span></td>`;
     body.appendChild(tr);
   }
 }
@@ -230,14 +349,24 @@ function closeSlotModal() {
 async function startCharge() {
   const cellId = document.getElementById('slot-modal-cell').value;
   const mode = document.getElementById('slot-modal-mode').value;
+  const testSelect = document.getElementById('slot-modal-test');
+  const testType = testSelect ? testSelect.value : '';
   if (!cellId || !activeSlot) return;
+
+  const slot = activeSlot;   // capture before closeSlotModal() resets it to 0
 
   const cell = Store.cells.get(cellId);
   const type = cell ? Store.types.get(cell.cell_type_id) : null;
   const chemistry = type ? chemistryToCode(type.chemistry) : 0;
 
   closeSlotModal();
-  await api('/api/charge', 'POST', { cell_id: cellId, slot: activeSlot, mode, chemistry });
+  await api('/api/charge', 'POST', {
+    cell_id: cellId,
+    slot,
+    mode: testType ? 'cycle' : mode,   // a test is always a full C->D cycle
+    chemistry,
+    testType: testType || undefined,
+  });
 }
 
 // --- entity modal (cell / type CRUD) -----------------------------------------
@@ -295,7 +424,25 @@ function openEntityModal(entity, existing = null) {
     form.appendChild(formSelect('chemistry', 'Chemie', CHEMISTRIES.map((c) => [c, c])));
     form.appendChild(formField('nominal_capacity_mah', 'Nennkapazit\u00e4t (mAh)', existing?.nominal_capacity_mah ?? 3000, 'number'));
     form.appendChild(formField('nominal_voltage_mv', 'Nennspannung (mV)', existing?.nominal_voltage_mv ?? 3700, 'number'));
-    form.querySelector('[name="chemistry"]').value = existing?.chemistry || 'Li-Ion';
+    form.appendChild(formField('typical_ir_mohm', 'Typischer IR (m\u03a9)', existing?.typical_ir_mohm ?? '', 'number'));
+    form.appendChild(formField('charge_current_ma', 'Ladestrom (mA)', existing?.charge_current_ma ?? 1000, 'number'));
+    form.appendChild(formField('discharge_current_ma', 'Entladestrom (mA)', existing?.discharge_current_ma ?? 1000, 'number'));
+    form.appendChild(formField('capacity_cutoff_mah', 'Kapazit\u00e4ts-Cutoff (mAh)', existing?.capacity_cutoff_mah ?? 3000, 'number'));
+
+    // Chemistry-dependent fields (voltage- vs delta-peak-terminated chemistries).
+    const chemWrap = document.createElement('div');
+    form.appendChild(chemWrap);
+    const chemSelect = form.querySelector('[name="chemistry"]');
+    const applyChemFields = () => {
+      chemWrap.innerHTML = '';
+      for (const name of chemFieldNames(chemSelect.value)) {
+        const f = CHEM_FIELDS[name];
+        chemWrap.appendChild(formField(name, f.label, existing?.[name] ?? f.def, 'number'));
+      }
+    };
+    chemSelect.value = existing?.chemistry || 'Li-Ion';
+    applyChemFields();
+    chemSelect.addEventListener('change', applyChemFields);
   } else {
     title.textContent = existing ? 'Zelle bearbeiten' : 'Zelle anlegen';
     form.appendChild(hiddenField('id', existing ? existing.id : genId('cell')));
@@ -303,6 +450,9 @@ function openEntityModal(entity, existing = null) {
     form.appendChild(formSelect('cell_type_id', 'Zelltyp', types));
     form.appendChild(formField('number', 'Nummer', existing?.number ?? '', 'number'));
     form.appendChild(formField('label', 'Label', existing?.label || ''));
+    form.appendChild(formField('purchase_capacity_mah', 'Kaufkapazit\u00e4t (mAh)', existing?.purchase_capacity_mah ?? '', 'number'));
+    form.appendChild(formField('purchase_ir_mohm', 'Kauf-IR (m\u03a9)', existing?.purchase_ir_mohm ?? '', 'number'));
+    form.appendChild(formField('notes', 'Notizen', existing?.notes || ''));
     form.appendChild(formSelect('status', 'Status', [['active', 'Aktiv'], ['retired', 'Ausgemustert']]));
     if (existing) {
       form.querySelector('[name="cell_type_id"]').value = existing.cell_type_id || '';
@@ -324,7 +474,7 @@ async function saveEntity() {
   const entityId = currentEntityId;
   const form = document.getElementById('entity-form');
   const data = Object.fromEntries(new FormData(form).entries());
-  for (const k of ['nominal_capacity_mah', 'nominal_voltage_mv', 'number']) {
+  for (const k of ['nominal_capacity_mah', 'nominal_voltage_mv', 'typical_ir_mohm', 'charge_current_ma', 'discharge_current_ma', 'target_voltage_mv', 'cutoff_voltage_mv', 'termination_current_ma', 'delta_peak_mv', 'trickle_charge_ma', 'capacity_cutoff_mah', 'number', 'purchase_capacity_mah', 'purchase_ir_mohm']) {
     if (data[k] !== undefined) data[k] = parseInt(data[k], 10) || 0;
   }
 
@@ -455,50 +605,49 @@ function switchView(name) {
   for (const view of document.querySelectorAll('.view')) {
     view.hidden = view.id !== `view-${name}`;
   }
-  for (const btn of document.querySelectorAll('nav button')) {
+  for (const btn of document.querySelectorAll('.bottom-nav button')) {
     btn.classList.toggle('active', btn.dataset.view === name);
   }
-  if (name === 'register') renderRegister();
-  if (name === 'history') renderHistory();
+  if (name === 'data') { renderRegister(); renderTestResults(); }
   if (name === 'settings') renderSettings();
 }
 
 // --- init --------------------------------------------------------------------
 
 function init() {
-  document.querySelectorAll('nav button').forEach((b) =>
+  document.querySelectorAll('.bottom-nav button').forEach((b) =>
     b.addEventListener('click', () => switchView(b.dataset.view)));
 
   // dashboard polling (live data is transient, not in the delta log)
   renderDashboard();
   setInterval(renderDashboard, 2000);
 
-  // delta sync -> re-render register + history
-  startSync(2000, () => { renderRegister(); renderHistory(); });
+  // delta sync -> re-render register + test results
+  startSync(2000, () => { renderRegister(); renderTestResults(); });
 
   // slot modal
-  document.getElementById('slot-modal-cancel').addEventListener('click', closeSlotModal);
-  document.getElementById('slot-modal-start').addEventListener('click', startCharge);
+  document.getElementById('slot-modal-cancel')?.addEventListener('click', closeSlotModal);
+  document.getElementById('slot-modal-start')?.addEventListener('click', startCharge);
 
   // entity modal
-  document.getElementById('entity-modal-cancel').addEventListener('click', closeEntityModal);
-  document.getElementById('entity-modal-save').addEventListener('click', saveEntity);
-  document.getElementById('btn-add-type').addEventListener('click', () => openEntityModal('type'));
-  document.getElementById('btn-add-cell').addEventListener('click', () => openEntityModal('cell'));
+  document.getElementById('entity-modal-cancel')?.addEventListener('click', closeEntityModal);
+  document.getElementById('entity-modal-save')?.addEventListener('click', saveEntity);
+  document.getElementById('btn-add-type')?.addEventListener('click', () => openEntityModal('type'));
+  document.getElementById('btn-add-cell')?.addEventListener('click', () => openEntityModal('cell'));
 
   // settings (BLE + WLAN)
-  document.getElementById('btn-ble-scan').addEventListener('click', scanBle);
-  document.getElementById('btn-ble-disconnect').addEventListener('click', disconnectBle);
-  document.getElementById('btn-wifi-save').addEventListener('click', saveWifi);
+  document.getElementById('btn-ble-scan')?.addEventListener('click', scanBle);
+  document.getElementById('btn-ble-disconnect')?.addEventListener('click', disconnectBle);
+  document.getElementById('btn-wifi-save')?.addEventListener('click', saveWifi);
 
   // update (version)
-  document.getElementById('btn-update').addEventListener('click', applyUpdate);
+  document.getElementById('btn-update')?.addEventListener('click', applyUpdate);
   checkVersion();
   setInterval(checkVersion, 30000);
 
   // table actions (event delegation)
-  document.getElementById('types-body').addEventListener('click', onRowAction('type'));
-  document.getElementById('cells-body').addEventListener('click', onRowAction('cell'));
+  document.getElementById('types-body')?.addEventListener('click', onRowAction('type'));
+  document.getElementById('cells-body')?.addEventListener('click', onRowAction('cell'));
 
   // service worker
   if ('serviceWorker' in navigator) {

@@ -23,6 +23,7 @@
 #define POLL_INTERVAL_MS        1000   // Zyklus aller 4 Slots
 #define POLL_SLOT_GAP_MS        150    // Pause zwischen den Slots
 #define RECONNECT_DELAY_MS      5000   // Wartezeit vor neuem Scan/Connect
+#define CONTROL_PAUSE_MS        5000   // Polling-Pause nach Start/Stop (MC5000 verarbeitet Kommando)
 
 // ---- WiFi-Verbindungstimeout ----
 #define WIFI_CONNECT_TIMEOUT_MS 15000
@@ -31,4 +32,4 @@
 // 1 = BLE-GATT-Werte (TX/RX) hexadezimal auf den seriellen Monitor ausgeben.
 // Sicht der NimBLE-Anwendungsschicht (nach L2CAP/ATT) — nicht die rohe Funk-Ebene.
 // Für die Protokoll-Verifikation am echten Gerät (z. B. NiMH-Mode-Byte).
-#define MC5000_DEBUG_RAW   0
+#define MC5000_DEBUG_RAW   1

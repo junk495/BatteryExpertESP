@@ -15,7 +15,7 @@ void test_basic_push_and_seq(void) {
 
     uint32_t s1 = log.push(EntityType::CELL, OpType::UPSERT, "p1");
     uint32_t s2 = log.push(EntityType::TYPE, OpType::UPSERT, "p2");
-    uint32_t s3 = log.push(EntityType::HISTORY, OpType::DEL, "p3");
+    uint32_t s3 = log.push(EntityType::TEST_RESULT, OpType::DEL, "p3");
 
     TEST_ASSERT_EQUAL_UINT32(1, s1);
     TEST_ASSERT_EQUAL_UINT32(2, s2);
@@ -28,7 +28,7 @@ void test_deltas_since_basic(void) {
     BoundedChangeLog log;
     log.push(EntityType::CELL, OpType::UPSERT, "A");
     log.push(EntityType::TYPE, OpType::UPSERT, "B");
-    log.push(EntityType::HISTORY, OpType::DEL, "C");
+    log.push(EntityType::TEST_RESULT, OpType::DEL, "C");
 
     std::vector<ChangeEntry> deltas;
 
@@ -78,13 +78,14 @@ void test_payload_truncation(void) {
     TEST_ASSERT_TRUE(log.getDeltasSince(0, deltas));
     TEST_ASSERT_EQUAL_STRING("hello", deltas[0].payload);
 
-    char long_payload[300];
-    for (int i = 0; i < 200; ++i) long_payload[i] = (char)120;
-    long_payload[200] = 0;
+    // A string longer than ChangeEntry::payload is truncated to payload-1.
+    char long_payload[400];
+    for (int i = 0; i < 350; ++i) long_payload[i] = (char)120;
+    long_payload[350] = 0;
     log.push(EntityType::TYPE, OpType::UPSERT, long_payload);
     TEST_ASSERT_TRUE(log.getDeltasSince(1, deltas));
     TEST_ASSERT_EQUAL(1, (int)deltas.size());
-    TEST_ASSERT_EQUAL(199, (int)strlen(deltas[0].payload));
+    TEST_ASSERT_EQUAL((int)(sizeof(ChangeEntry{}.payload) - 1), (int)strlen(deltas[0].payload));
 }
 
 void test_reset(void) {
@@ -103,7 +104,7 @@ void test_reset(void) {
     TEST_ASSERT_TRUE(log.getDeltasSince(999999, deltas));
     TEST_ASSERT_EQUAL(0, (int)deltas.size());
 
-    uint32_t s = log.push(EntityType::HISTORY, OpType::UPSERT, "c");
+    uint32_t s = log.push(EntityType::TEST_RESULT, OpType::UPSERT, "c");
     TEST_ASSERT_EQUAL_UINT32(1000000, s);
     TEST_ASSERT_EQUAL_UINT32(1000001, log.getCurrentSeq());
     TEST_ASSERT_TRUE(log.getDeltasSince(999999, deltas));
